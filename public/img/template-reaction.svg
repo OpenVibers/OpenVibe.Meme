@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 280" role="img" aria-label="One empty caption bar under a reaction face outline">
+<rect width="440" height="280" fill="#171a20"/>
+<rect x="36" y="32" width="368" height="148" rx="20" fill="#2b313c"/>
+<circle cx="220" cy="106" r="48" fill="none" stroke="#c3ac00" stroke-width="10"/>
+<path d="M196 96h8M236 96h8M198 126c14 14 30 14 44 0" stroke="#c3ac00" stroke-width="8" stroke-linecap="round" fill="none"/>
+<rect x="60" y="204" width="320" height="34" rx="8" fill="#0f1115"/>
+</svg>

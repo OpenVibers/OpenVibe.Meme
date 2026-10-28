@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 280" role="img" aria-label="Three empty caption bars in a row">
+<rect width="440" height="280" fill="#20242c"/>
+<rect x="24" y="40" width="120" height="150" rx="12" fill="#2b313c"/>
+<rect x="160" y="40" width="120" height="150" rx="12" fill="#2b313c"/>
+<rect x="296" y="40" width="120" height="150" rx="12" fill="#2b313c"/>
+<path d="M40 160h88M176 160h88M312 160h88" stroke="#4b5566" stroke-width="8" stroke-linecap="round"/>
+<rect x="40" y="214" width="360" height="28" rx="7" fill="#171a20"/>
+</svg>

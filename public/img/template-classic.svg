@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 280" role="img" aria-label="Two empty caption bars on a plain background">
+<rect width="440" height="280" fill="#20242c"/>
+<rect x="28" y="28" width="384" height="176" rx="14" fill="#2b313c"/>
+<circle cx="92" cy="86" r="26" fill="#c3ac00"/>
+<path d="M72 146h244M72 172h176" stroke="#4b5566" stroke-width="10" stroke-linecap="round"/>
+<rect x="28" y="220" width="384" height="32" rx="8" fill="#171a20"/>
+</svg>
