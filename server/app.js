@@ -156,6 +156,22 @@ async function createApp(opts = {}) {
 
     // ── Pages ───────────────────────────────────────────────
     app.use(rateLimit({ windowMs: 60_000, limit: Number(process.env.MEME_RATE_LIMIT_PER_MIN) || 300, standardHeaders: true, legacyHeaders: false }));
+    // ── Agent layer (openvibe-shared/agent-layer) ───────────
+    // The manifest and the Markdown twins of the public pages. Gated to twin requests only, so a browser and a
+    // page drawn for a signed-in person always reach the site's own routes; the twin renderer is signed out.
+    {
+        const agentLayer = require('openvibe-shared/agent-layer');
+        const agent = express.Router();
+        agent.use((req, _res, next) => {
+            const twinPath = req.path.endsWith('.md');
+            const twinFormat = req.query.format === 'markdown';
+            const twinAccept = !!(req.headers.accept && req.accepts(['html', 'text/markdown']) === 'text/markdown');
+            if (req.path === '/.well-known/agent.json' || twinPath || twinFormat || twinAccept) return next();
+            return next('router');
+        });
+        agentLayer.mount(agent, { descriptor: require('./agent-descriptor'), render: require('./agent-pages').createAgentPages(ctx).renderPublicPage });
+        app.use(agent);
+    }
     app.use(createPageRoutes(ctx));
     app.use((req, res) => send(res, 404, {
         viewer: req.viewer, config, path: req.originalUrl, title: 'Not found',
