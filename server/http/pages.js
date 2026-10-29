@@ -47,7 +47,7 @@ function createPageRoutes(ctx) {
         const { week } = currentWeek(s.now());
         const [trending, weekOut, c] = await Promise.all([entries.trending({ limit: 8 }), entries.week({ week }), counts()]);
         return page(req, res, {
-            index: true, cache: PUBLIC_CACHE,
+            index: true, cache: PUBLIC_CACHE, agentLayer: true,
             title: null,
             description: 'The open meme database, rebuilt with AI: every entry cites the moment it happened, follows its later uses, and people vote for meme of the week.',
             jsonLd: homeJsonLd(config),
@@ -71,6 +71,7 @@ function createPageRoutes(ctx) {
         });
         return page(req, res, {
             index: e.visibility === 'public',
+            agentLayer: e.visibility === 'public',
             cache: e.visibility === 'public' ? PUBLIC_CACHE : null,
             title: e.title,
             description: (e.summary || `${e.title} on OpenVibe.Meme`).slice(0, 160),
@@ -102,7 +103,7 @@ function createPageRoutes(ctx) {
         const subject = signedIn(req) ? req.viewer.subject : null;
         const out = await entries.week({ week, subject });
         return page(req, res, {
-            index: true, cache: PUBLIC_CACHE,
+            index: true, cache: PUBLIC_CACHE, agentLayer: true,
             title: 'Meme of the week',
             description: 'This ISO week’s candidates for meme of the week and the people’s vote.',
             body: raw(views.week({ out, signedIn: Boolean(subject), voted: req.query.voted === '1', error: req.query.error === '1' })),
@@ -132,7 +133,7 @@ function createPageRoutes(ctx) {
         const previewLines = LINES.map((i) => String(values[`line${i}`] || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
         const preview = chosen && previewLines.length ? { template: chosen, lines: previewLines } : null;
         return page(req, res, {
-            index: true, cache: PUBLIC_CACHE,
+            index: true, cache: PUBLIC_CACHE, agentLayer: true,
             title: 'Make a caption',
             description: 'Pick a template, type up to four lines and preview them over the image before saving.',
             body: raw(views.make({ templates, values: { ...values, template_id: chosen ? chosen.id : '' }, preview, signedIn: Boolean(signedIn(req)), problem })),
@@ -158,6 +159,7 @@ function createPageRoutes(ctx) {
         const template = await entries.templateById(c.template_id);
         return page(req, res, {
             index: c.visibility === 'public',
+            agentLayer: c.visibility === 'public',
             cache: c.visibility === 'public' ? PUBLIC_CACHE : null,
             title: template ? `A caption on ${template.name}` : 'A saved caption',
             description: c.lines.join(' / ').slice(0, 160),
@@ -167,7 +169,7 @@ function createPageRoutes(ctx) {
 
     // ── Developers ──────────────────────────────────────────
     r.get('/developers', (req, res) => page(req, res, {
-        index: true, cache: PUBLIC_CACHE,
+        index: true, cache: PUBLIC_CACHE, agentLayer: true,
         title: 'The OpenVibe.Meme API',
         description: 'The JSON API, the Search document and the public sources the importer reads.',
         jsonLd: [seo.jsonLd.webPage({ name: 'The OpenVibe.Meme API', url: `${base()}/developers`, description: 'The JSON API, the Search document and the public sources the importer reads.', siteUrl: base() })],
