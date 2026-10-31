@@ -67,7 +67,10 @@ function evaluate({ entry = null, citations = [], judgement = null, gate = {} } 
 
 /**
  * The encyclopedia's rule. A classic has no uses to count: it is published when the AI scored it as a real, widely
- * used meme and its own text is clean (no looks, no denied word, nothing denied in what it cites).
+ * used meme, it is written (a title, a summary, where it started, how it spread) and nothing it cites is denied.
+ * Two bars of the candidates' rule do not apply (10-31): two example uses is how a chat catchphrase proves itself, not
+ * a meme Wikipedia already documents; and the owner lifted the looks rule that day (AI may describe people; only
+ * explicit content stays gated, which the deny list keeps).
  */
 function evaluateClassic({ judgement = null, minScore = 0.75, entry = null } = {}) {
     const reasons = [];
@@ -77,14 +80,11 @@ function evaluateClassic({ judgement = null, minScore = 0.75, entry = null } = {
         if (!Number.isFinite(score)) reasons.push('no score');
         else if (score < minScore) reasons.push(`scored ${score.toFixed(2)}, under ${minScore.toFixed(2)}`);
         if (judgement.denied) reasons.push('a denied source');
-        if (judgement.looks) reasons.push('the text names looks');
         if (!judgement.title) reasons.push('no title');
         if (!judgement.summary) reasons.push('no summary');
         if (!judgement.origin) reasons.push('no origin');
         if (!judgement.spread) reasons.push('no spread');
-        if (!Array.isArray(judgement.examples) || judgement.examples.length < 2) reasons.push('fewer than two examples');
     }
-    if (entry && entry.title && hasLooks(entry.title)) reasons.push('the title names looks');
     return {
         publish: reasons.length === 0,
         reasons,
