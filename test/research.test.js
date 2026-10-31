@@ -86,7 +86,9 @@ const SOURCES = [
             assert.ok(done.summary.length > 0 && done.summary.length <= 300);
             assert.ok(Math.abs(done.cost_usd - 0.02) < 0.0001);
             assert.ok(aiState.requests[0].input.query === 'Doge');
-            assert.strictEqual((await t.get(`/api/v1/research/${r.json().id}`)).status, 200, 'a succeeded read is public');
+            const pub = await t.get(`/api/v1/research/${r.json().id}`);
+            assert.strictEqual(pub.status, 200, 'a succeeded read is public');
+            assert.strictEqual(pub.json().subject, undefined, 'the public read does not name its author');
             const usage = await t.ctx.s.db.maybe('SELECT * FROM meme_research_usage');
             assert.strictEqual(Number(usage.calls), 2);
         });
