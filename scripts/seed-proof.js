@@ -19,7 +19,6 @@ const { load } = require('../server/config');
 const { openStore } = require('../server/db');
 const { createUpstreams, parseApiTime } = require('../server/upstreams');
 const { createStore } = require('../server/store');
-const { cleanSummary } = require('../server/text/no-looks');
 const { isDenied } = require('../server/deny-list');
 
 const CHAT_MESSAGE_ID = 86957;
@@ -97,7 +96,7 @@ async function runSeed({ config, s, upstreams, log = console } = {}) {
 
     const first = citations.reduce((m, c) => (Date.parse(c.observed_at) < Date.parse(m) ? c.observed_at : m), citations[0].observed_at);
     const last = citations.reduce((m, c) => (Date.parse(c.observed_at) > Date.parse(m) ? c.observed_at : m), citations[0].observed_at);
-    const summary = cleanSummary(TITLE, 'Cozmo, the robot, is not online: a chat line and a stream moment about its Wi-Fi. The robot is offline, again.');
+    const summary = 'Cozmo, the robot, is not online: a chat line and a stream moment about its Wi-Fi. The robot is offline, again.';
 
     const existing = await entries.bySlug(SLUG);
     if (existing) {

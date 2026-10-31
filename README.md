@@ -14,7 +14,7 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
 
 - **Entries, cited.** Every entry has one origin citation and any number of later uses; the quote is verbatim,
   the URL is canonical (OpenVibe.Video's `?t=` redirect is followed, e.g. `/v/6026?t=864` → `/v/6025?t=1541`),
-  and `quote_hash` is its sha256. A summary is AI-written and passes `noLooks`; if it names looks it is replaced by
+  and `quote_hash` is its sha256. A summary is AI-written and passes `AI text as written`; if it names looks it is replaced by
   the title. Verbatim quotes are never rewritten.
 - **Candidates stay hidden.** `server/importer.js` reads public Chat/Live APIs only, finds a 3–6 word phrase used at
   least twice on two different days, attaches citations and inserts the entry `hidden`. It never publishes. A staff
@@ -166,7 +166,7 @@ the public pages and every public entry.
 - origin: Chat message **86957** (2026-10-28 00:11:53, “your Cozmo ain’t online yet”);
 - use: VOD **6025** at **1541 s** — the canonical target of `/v/6026?t=864` (source part 6026 at 864.08 s), quote
   “but yeah and Cosmo is broken now…”;
-- summary AI-written and `noLooks`-cleaned; `first_seen_at`/`last_seen_at` from the two citations.
+- summary AI-written and stored as written; `first_seen_at`/`last_seen_at` from the two citations.
 
 It never publishes. A re-run leaves the existing entry and adds only a citation that is not already there. VOD
 5709 and clip 483 are refused before anything is written.
@@ -183,7 +183,7 @@ node scripts/seed-proof.js   # the first proof, hidden, from the live public API
 ```
 
 The tests boot the app with a mock Network, a Chat/Live/Video fixture server, and a temporary database: the
-migration, the importer's candidate and its canonical redirect, the deny list, `noLooks`, the one-vote-a-week rule,
+migration, the importer's candidate and its canonical redirect, the deny list, `AI text as written`, the one-vote-a-week rule,
 the caption limits, staff publish/patch/hide, the Search document (validated against
 `search.index-document@1`), the citation 404 → gone → hidden path, sign-in, the pages and cache headers, and the
 account export/deletion over votes, captions and reports.
