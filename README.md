@@ -33,6 +33,12 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
 - **The citation is checked again.** A daily job reads every public citation URL; a 404/410 marks it `gone`, a
   401/403 marks it `hidden`, and an entry whose origin is gone is hidden (revision +1, Search tombstone).
 - **Meme of the week.** People vote once per ISO week; a second vote changes the choice, never adds a ballot.
+- **The encyclopedia (M2).** An entry has a `scope` (`openvibe` for today's running jokes, `internet` for the
+  encyclopedia), an origin with a public citation, spread points (date, place, URL, count), named variations,
+  Media examples, meaning and usage, L1 labels (`nudity`, `language`, `graphic`, `18+`, `flashing`, `spoilers`),
+  related memes and a moderated revision history. A signed-in person proposes an entry or an edit; it stays
+  pending, and staff approve or reject it. Every public entry is still one Search Fabric document, now with
+  `scope` and `labels` facets and the origin as provenance.
 - **The generator.** Pick a template, type 1–4 lines of at most 120 characters each and preview them as HTML text
   over the image; a caption is stored as text lines, never as a rendered image.
 
@@ -40,10 +46,16 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
 
 | Table | Holds | Migration |
 |---|---|---|
-| `meme_entries` | `mem_` + ULID, unique slug (`/m/<slug>`), title, kind `joke\|catchphrase\|bit\|meme\|saga\|classic`, AI summary, status + `status_since`, first/last seen, visibility `public\|unlisted\|hidden`, `revision` (+1 on every change), timestamps, the picture and its licence, the attribution, the Wikidata id | `migrations/0001_initial.sql`, `0002_judge_and_encyclopedia.sql` |
+| `meme_entries` | `mem_` + ULID, unique slug (`/m/<slug>`), title, kind `joke\|catchphrase\|bit\|meme\|saga\|classic\|format\|event\|person\|phrase\|deep_dive`, scope `openvibe\|internet`, AI summary, meaning/usage, L1 `labels`, status + `status_since`, first/last seen, visibility `public\|unlisted\|hidden`, `submitted_by` for a proposal, `revision` (+1 on every change), timestamps, the picture and its licence, the attribution, the Wikidata id | `migrations/0001_initial.sql`, `0002_judge_and_encyclopedia.sql`, `0003_encyclopedia.sql` |
 | `meme_citations` | entry, role `origin\|use\|example`, source service/type/id, stream/VOD/clip/message ids, canonical VOD `offset_seconds`, verbatim `quote_text`, `quote_hash`, canonical `url`, `observed_at`, `source_status` `live\|hidden\|gone`; the open web is a source too (`wikipedia`, `wikidata`, `commons`) | `0001_initial.sql`, `0002_judge_and_encyclopedia.sql` |
 | `meme_judgements` | one row per entry: the score, the reason, the title/summary/origin/spread/examples the AI wrote, whether the text names looks or carries a denied word, the model and the run | `0002_judge_and_encyclopedia.sql` |
 | `meme_status_events` | every status change: from, to, reason, who, when; a judge decision adds `decision`, `from_visibility`, `to_visibility` and `score` | `0001_initial.sql`, `0002_judge_and_encyclopedia.sql` |
+| `meme_origins` | an internet entry's public origin: source `web\|reddit\|media\|openvibe`, URL, title, publisher, author, published/retrieved time, quote | `0003_encyclopedia.sql` |
+| `meme_spread_points` | entry, date, place, optional URL and count, note — one sighting per (entry, date, place, URL) | `0003_encyclopedia.sql` |
+| `meme_variations` | entry, name, description, optional `med_` Media id, source URL | `0003_encyclopedia.sql` |
+| `meme_examples` | entry, `med_` Media id, caption, source URL — reposted pictures keep their source link | `0003_encyclopedia.sql` |
+| `meme_entry_related` | directed related pairs; the API returns both sides' public entries | `0003_encyclopedia.sql` |
+| `meme_entry_revisions` | entry, revision, author, `change` jsonb, field-by-field `diff`, moderation state `pending\|approved\|rejected`, reviewer and note | `0003_encyclopedia.sql` |
 | `meme_votes` | (`week` `YYYY-Www`, `subject`) → entry; one vote a week | `0001_initial.sql` |
 | `meme_templates` | id, name, `image_url` (openvibe.media, a local data-free placeholder or a Wikimedia Commons file), `box_count`, source, license, credit, source page, attribution; three placeholders seeded | `0001_initial.sql`, `0002_judge_and_encyclopedia.sql` |
 | `meme_captions` | `mcp_` + ULID, subject, template, `lines` jsonb (1–4 plain-text lines), visibility, created | `0001_initial.sql` |
@@ -98,9 +110,14 @@ also gets per-actor minute/hour limits (`MEME_LIMITS_MINUTE`, `MEME_LIMITS_HOUR`
 
 | Route | What it does |
 |---|---|
-| `GET /entries?limit=&cursor=&kind=&status=` | public entries, newest first; opaque keyset cursor; `Cache-Control: public, max-age=60` |
-| `GET /entries/:slug` | one entry with `origin`, every `citation`, the use `timeline` and `examples`, and the judge's `notes` (where it started, how people use it, the examples); a hidden one is 404 unless staff |
+| `GET /entries?scope=&q=&status=&label=&kind=&sort=&window=&channel=&limit=&cursor=` | public entries; `scope=openvibe\|internet`; `q` matches title/summary/meaning/usage/slug; `label` is one L1 label; `sort=top&window=day\|week\|month` ranks by live uses (a cursor only on `newest`); `channel=<stream_id>` is Live's per-channel Memes block; `Cache-Control: public, max-age=60` |
+| `GET /entries/:slug` | one entry with `origin` (a citation, or the web origin), `web_origin`, citations, `timeline`, `examples`, `spread`, `variations`, `related` and approved `revisions`, and the judge's `notes` (where it started, how people use it, the examples); a hidden proposal is 404 unless its author or staff |
+| `GET /entries/:slug/revisions` | the approved revision history; staff also see pending and rejected ones |
 | `GET /entries/:slug/series?days=30` | uses per UTC day, zero-filled, 1–365 days |
+| `POST /entries` | signed in, same-origin: a proposal (`title`, `kind`, `scope`, `summary`, `meaning`, `usage`, `labels`, `origin`, `spread`, `variations`, `examples`, `related`) — born hidden with revision 1 pending (202); staff proposals are approved and public (201) |
+| `POST /entries/:slug/revisions` | signed in: a proposed edit, stored as a revision with a field-by-field `diff`; a person's waits for review (202), staff's applies at once (201) |
+| `POST /entries/:slug/revisions/:revision/review` | staff: `{ state: "approved"\|"rejected", note? }`; approving copies the change onto the entry, bumps its revision and re-indexes it |
+| `GET /moderation/revisions?limit=` | staff: the pending revision queue with each entry's slug and title |
 | `GET /trending?limit=` | public entries, `rising` first, then `peaked`, `classic`, `dead`; last use newest first |
 | `GET /week` | this ISO week's candidates (public entries with a live use that week) and their vote counts |
 | `POST /week/vote` | signed in, same-origin; `{ entry_id }`; upsert per (`week`, subject) — one vote a week |
@@ -113,10 +130,11 @@ also gets per-actor minute/hour limits (`MEME_LIMITS_MINUTE`, `MEME_LIMITS_HOUR`
 | `GET /staff/candidates/:slug` | staff: one candidate — its judgement, its citations and its decision history |
 | `POST /entries/:slug/publish` | staff: hidden → public; `409 meme.origin_gone` when the origin is not live |
 | `POST /entries/:slug/hide` | staff: public → hidden; Search tombstone |
-| `PATCH /entries/:slug` | staff: `{ title, kind, status, reason? }`; a status change writes `meme_status_events` |
+| `PATCH /entries/:slug` | staff: `{ title, kind, status, reason? }`; a status change writes `meme_status_events` and the edit is kept as an approved revision |
 
 Validation refusals are `400 { code: "meme.invalid", message }`; a blocked caption is
-`400 { code: "meme.blocked_words" }`. Other codes: `meme.sign_in_required`, `meme.staff_required`,
+`400 { code: "meme.blocked_words" }`; an edit that changes nothing is `409 meme.no_change` and a revision
+already reviewed is `409 meme.revision_reviewed`. Other codes: `meme.sign_in_required`, `meme.staff_required`,
 `meme.cross_site`, `meme.not_found`, `meme.template_not_found`, `meme.origin_gone`, `meme.rate_limited`.
 
 ## The judge
