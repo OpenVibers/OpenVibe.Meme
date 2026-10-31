@@ -38,6 +38,10 @@ const { createSearchIndex } = require('./search');
 const { createUpstreams } = require('./upstreams');
 const { createImporter } = require('./importer');
 const { createReverifier } = require('./reverify');
+const { createMemeAi } = require('./ai/client');
+const { createContext } = require('./ai/context');
+const { createJudge } = require('./ai/judge');
+const { createJudgeJob } = require('./jobs/judge');
 const { createNetworkSender } = require('openvibe-sdk/account-data');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -64,6 +68,12 @@ async function createApp(opts = {}) {
     const upstreams = createUpstreams({ config, fetchImpl, log });
     const importer = createImporter({ config, s, entries, upstreams, fetchImpl, log });
     const reverifier = createReverifier({ config, s, entries, upstreams, log });
+    // The judge: OpenVibe.AI scores each candidate from its own citations and writes the entry; the publish rule
+    // decides what becomes public.
+    const ai = createMemeAi({ config, fetchImpl, log });
+    const context = createContext({ config, upstreams, log });
+    const judge = createJudge({ config, ai, context, log });
+    const judgeJob = createJudgeJob({ config, s, entries, judge, context, log });
 
     // Account export and deletion (ADR-033). The sender posts to Network's internal routes with this service's own
     // client-credentials token; a test injects a stand-in through opts.accountSend.
@@ -74,6 +84,7 @@ async function createApp(opts = {}) {
 
     const ctx = {
         config, s, keys, sso, principal, search, entries, upstreams, importer, reverifier, accountData, accountSend, log,
+        ai, context, judge, judgeJob,
     };
 
     const app = express();

@@ -155,8 +155,52 @@ function createUpstreams({ config, fetchImpl = globalThis.fetch, log = console }
         return { status: 'gone' };
     }
 
+    /**
+     * The chat lines around a cited message: the lines before and after it, so the judge reads the joke and not
+     * one line alone. The same walk-back as chatMessage() finds the message; the page it lands on holds the rest.
+     */
+    async function chatContext(citation, { lines = 6 } = {}) {
+        const at = new Date(citation.observed_at).getTime();
+        if (!Number.isFinite(at)) return [];
+        const wanted = String(citation.chat_message_id != null ? citation.chat_message_id : citation.source_id);
+        let before = chatBefore(at + 60_000);
+        for (let page = 0; page < 5; page++) {
+            const h = await chatHistory({ before, limit: 500 });
+            const idx = h.messages.findIndex((m) => String(m.id) === wanted);
+            if (idx >= 0) {
+                const half = Math.max(1, Math.ceil(lines / 2));
+                return h.messages.slice(Math.max(0, idx - half), idx + half + 1).map((m) => ({
+                    id: m.id,
+                    who: m.username ? String(m.username) : null,
+                    text: String(m.message || ''),
+                    at: parseApiTime(m.timestamp),
+                }));
+            }
+            const oldest = h.messages.length ? parseApiTime(h.messages[h.messages.length - 1].timestamp) : null;
+            if (!oldest || Date.parse(oldest) <= at - 86_400_000) break;
+            before = chatBefore(Date.parse(oldest) - 1000);
+        }
+        return [];
+    }
+
+    /** The transcript lines around a cited second: what was said just before and just after it. */
+    async function vodContext(vodId, offsetSeconds, { lines = 6 } = {}) {
+        const id = String(vodId == null ? '' : vodId);
+        if (!id) return [];
+        let data;
+        try { data = await transcripts([id]); } catch { return []; }
+        const segs = (data[id] && Array.isArray(data[id].segments)) ? data[id].segments : [];
+        if (!segs.length) return [];
+        const at = Number(offsetSeconds);
+        if (!Number.isFinite(at)) return [];
+        const before = segs.filter((x) => Number(x.start) <= at).slice(-Math.max(1, Math.floor(lines / 2)));
+        const after = segs.filter((x) => Number(x.start) > at).slice(0, Math.max(1, lines - before.length));
+        return [...before, ...after].map((x) => ({ start: Number(x.start), text: String(x.text || '') }));
+    }
+
     return {
         chatHistory, chatTimeline, rundownTopics, rundownTopic, vod, transcripts, canonicalVideo, citationUrl, chatMessage,
+        chatContext, vodContext,
         base,
     };
 }

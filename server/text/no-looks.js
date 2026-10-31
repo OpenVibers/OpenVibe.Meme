@@ -6,7 +6,7 @@
  * names looks at all is not repaired word by word — it is replaced by the entry's title, as Meme's plan says.
  * Verbatim quotes are never passed through this: rewriting a quote would falsify the citation.
  */
-const { noLooks, hasLooks } = require('openvibe-sdk/no-looks');
+const { noLooks, hasLooks, isExplicit } = require('openvibe-sdk/no-looks');
 
 /** The summary to store for an AI-written entry summary. */
 function cleanSummary(title, summary) {
@@ -18,4 +18,4 @@ function cleanSummary(title, summary) {
     return cleaned || t;
 }
 
-module.exports = { cleanSummary, noLooks, hasLooks };
+module.exports = { cleanSummary, noLooks, hasLooks, isExplicit };

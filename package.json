@@ -8,6 +8,9 @@
     "start": "node server/index.js",
     "dev": "NODE_ENV=development node server/index.js",
     "seed:proof": "node scripts/seed-proof.js",
+    "seed:classics": "node scripts/seed-classics.js",
+    "seed:templates": "node scripts/seed-templates.js",
+    "rejudge": "node scripts/rejudge.js",
     "test": "node test/run.js",
     "test:pg": "MEME_TEST_STORE=pg node test/run.js"
   },

@@ -70,6 +70,33 @@ function load(env = process.env) {
             timeoutMs: Math.max(500, int(env.MEME_UPSTREAM_TIMEOUT_MS, 8000)),
         },
 
+        // OpenVibe.AI: the judge and the encyclopedia's writing pass. Meme calls ai.generate as the service
+        // `meme` with a client-credentials token (audience openvibe.ai, scope ai.run.create); Network grants the
+        // token and the ai.* namespace. Meme never names a provider: AI's routing decides, and the run reports
+        // what answered.
+        ai: {
+            url: trim(env.OV_AI_INTERNAL_URL || 'http://127.0.0.1:4700'),
+            audience: env.MEME_AI_AUDIENCE || 'openvibe.ai',
+            scope: env.MEME_AI_SCOPE || 'ai.run.create',
+            waitMs: Math.max(1000, int(env.MEME_AI_WAIT_MS, 55_000)),
+            timeoutMs: Math.max(1000, int(env.MEME_AI_TIMEOUT_MS, 120_000)),
+            pollMs: Math.max(100, int(env.MEME_AI_POLL_MS, 1500)),
+            maxTokens: Math.max(200, int(env.MEME_AI_MAX_TOKENS, 1400)),
+            temperature: 0.2,
+        },
+
+        // The judge: it scores a candidate from its own citations and writes the entry. Only what clears the bar is
+        // published; everything else stays hidden for staff with its score. Off under MEME_DRILL.
+        judge: {
+            intervalMs: Math.max(60_000, int(env.MEME_JUDGE_INTERVAL_MS, 30 * 60_000)),
+            minScore: Number.isFinite(Number(env.MEME_JUDGE_MIN_SCORE)) ? Number(env.MEME_JUDGE_MIN_SCORE) : 0.75,
+            minUses: Math.max(1, int(env.MEME_JUDGE_MIN_USES, 3)),
+            minDays: Math.max(1, int(env.MEME_JUDGE_MIN_DAYS, 2)),
+            minChannels: Math.max(1, int(env.MEME_JUDGE_MIN_CHANNELS, 2)),
+            maxPerRun: Math.min(30, Math.max(1, int(env.MEME_JUDGE_MAX_PER_RUN, 10))),
+            contextLines: Math.max(1, int(env.MEME_JUDGE_CONTEXT_LINES, 6)),
+        },
+
         // The candidate importer: every 30 minutes, off under MEME_DRILL (tests call runOnce()).
         importer: {
             intervalMs: Math.max(60_000, int(env.MEME_IMPORTER_INTERVAL_MS, 30 * 60_000)),
@@ -82,6 +109,32 @@ function load(env = process.env) {
 
         // Every citation is re-verified daily, off under MEME_DRILL.
         reverify: { intervalMs: Math.max(60_000, int(env.MEME_REVERIFY_INTERVAL_MS, 24 * 60 * 60_000)) },
+
+        // The encyclopedia: the well-known internet memes, cited to Wikipedia (CC BY-SA) and to Wikidata (CC0),
+        // written by the same AI pass. It is a one-off seed, not a timer: the job runs from scripts/seed-classics.js.
+        encyclopedia: {
+            wikipedia: trim(env.MEME_WIKIPEDIA_URL || 'https://en.wikipedia.org'),
+            wikidata: trim(env.MEME_WIKIDATA_URL || 'https://www.wikidata.org'),
+            commons: trim(env.MEME_COMMONS_URL || 'https://commons.wikimedia.org'),
+            userAgent: env.MEME_WIKI_USER_AGENT || 'OpenVibe.Meme/0.2 (+https://openvibe.meme; contact@openvibe.network)',
+            timeoutMs: Math.max(1000, int(env.MEME_WIKI_TIMEOUT_MS, 20_000)),
+            minIntervalMs: Math.max(0, int(env.MEME_WIKI_MIN_INTERVAL_MS, 250)),
+            limit: Math.min(1000, Math.max(1, int(env.MEME_ENCYCLOPEDIA_LIMIT, 400))),
+            // The lists the seeds are read from (Wikipedia, CC BY-SA): the phenomena list and the category behind it.
+            lists: String(env.MEME_ENCYCLOPEDIA_LISTS || 'List_of_Internet_phenomena').split(',').map((x) => x.trim()).filter(Boolean),
+            categories: String(env.MEME_ENCYCLOPEDIA_CATEGORIES || 'Internet memes,Memes').split(',').map((x) => x.trim()).filter(Boolean),
+            minScore: Number.isFinite(Number(env.MEME_ENCYCLOPEDIA_MIN_SCORE)) ? Number(env.MEME_ENCYCLOPEDIA_MIN_SCORE) : 0.75,
+        },
+
+        // The templates: the well-known public-domain or freely licensed meme templates, from Wikimedia Commons,
+        // each with its licence and credit.
+        templates: {
+            commons: trim(env.MEME_COMMONS_URL || 'https://commons.wikimedia.org'),
+            userAgent: env.MEME_WIKI_USER_AGENT || 'OpenVibe.Meme/0.2 (+https://openvibe.meme; contact@openvibe.network)',
+            timeoutMs: Math.max(1000, int(env.MEME_WIKI_TIMEOUT_MS, 20_000)),
+            minIntervalMs: Math.max(0, int(env.MEME_WIKI_MIN_INTERVAL_MS, 250)),
+            limit: Math.min(200, Math.max(1, int(env.MEME_TEMPLATES_LIMIT, 40))),
+        },
     };
 }
 
