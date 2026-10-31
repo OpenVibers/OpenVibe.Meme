@@ -802,6 +802,9 @@ function createStore(s, { search }) {
 
     /** Copy a validated change onto the entry. Caller owns the transaction. */
     async function applyChange(t, row, v, revision) {
+        if (v.scope === 'internet' && v.origin === undefined && !await originOf(row.id, t)) {
+            return refusal(400, 'meme.invalid', 'An internet entry needs an origin.', 'origin');
+        }
         if (v.related !== undefined) {
             const rel = await checkRelated(v.related, t);
             if (!rel.ok) return rel;
