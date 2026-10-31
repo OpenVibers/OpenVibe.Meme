@@ -181,7 +181,9 @@ function createApi(ctx) {
         const mine = req.principal.kind === 'user' && row.subject === req.principal.subject;
         if (row.status !== 'succeeded' && !mine && !isStaff(req.principal)) return problem(res, 404, 'meme.not_found', 'No such research job.');
         res.set('Cache-Control', row.status === 'succeeded' ? 'public, max-age=60' : 'private, no-store');
-        return res.json(row);
+        const out = { ...row };
+        if (!mine && !isStaff(req.principal)) delete out.subject;
+        return res.json(out);
     });
 
     // Save a succeeded read as a public deep-dive entry (its full text stays in meme_deep_dives).
