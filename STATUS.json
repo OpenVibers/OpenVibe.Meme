@@ -10,11 +10,11 @@
   "domain": "openvibe.meme",
   "contracts": "openvibe-contracts v0.234.0",
   "sdk": "openvibe-sdk v0.74.0",
-  "shared": "openvibe-shared v4.55.0",
+  "shared": "openvibe-shared v4.57.1",
   "packages": [
     "openvibe-contracts v0.234.0",
     "openvibe-sdk v0.74.0",
-    "openvibe-shared v4.55.0"
+    "openvibe-shared v4.57.1"
   ],
   "summary": "OpenVibe.Meme is the open meme database, rebuilt with AI. The importer reads only public Chat and Live APIs and proposes a candidate when a recurring phrase appears in at least two uses on two different days; the candidate is born hidden with a verbatim citation for every use and stays hidden until a staff person publishes it. Every citation is re-verified daily, a 404 marks it gone and an entry whose origin is gone is hidden. People vote once a week for meme of the week, and a caption is plain text over a template, never a rendered image. Every public entry is one Search Fabric document queued in the service's outbox.",
   "works": [
@@ -60,5 +60,5 @@
     "deploy files"
   ],
   "deployment": "not deployed: the unit and nginx vhost are deploy/systemd/openvibe-meme.service and deploy/nginx/openvibe.meme.conf",
-  "updated": "2026-10-30"
+  "updated": "2026-10-31"
 }
