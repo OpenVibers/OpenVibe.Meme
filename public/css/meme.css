@@ -158,3 +158,9 @@ html.ov-motion .mm-demo-bars i { animation: mm-bar .9s cubic-bezier(.2,.7,.2,1) 
 @media (max-width: 860px) { .mm-make-grid { grid-template-columns: minmax(0, 1fr); } .mm-preview { position: static; order: -1; } }
 @media (prefers-reduced-motion: reduce) { .mm-tree-lines path, .mm-sticker, .mm-demo-bars i { animation: none !important; } }
 html[data-ov-motion=reduced] .mm-tree-lines path, html[data-ov-motion=reduced] .mm-sticker, html[data-ov-motion=reduced] .mm-demo-bars i { animation: none !important; }
+
+/* Be the first (10-31): what is still missing, one short row below the scenes, never an empty section up top. */
+.mm-first-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 10px; }
+.mm-first-list li { display: grid; gap: 4px; padding: 14px 16px; border-radius: 16px; border: 1px dashed color-mix(in srgb, var(--room-accent) 45%, var(--border, #1f2d47)); }
+.mm-first-list span { color: var(--text-secondary, #96a7c2); font-size: 14px; line-height: 1.45; }
+.mm-first-list a { justify-self: start; margin-top: 4px; font-weight: 700; color: var(--room-strong, var(--room-accent)); }
