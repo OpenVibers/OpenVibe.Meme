@@ -22,8 +22,10 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
 - **The citation is checked again.** A daily job reads every public citation URL; a 404/410 marks it `gone`, a
   401/403 marks it `hidden`, and an entry whose origin is gone is hidden (revision +1, Search tombstone).
 - **Meme of the week.** People vote once per ISO week; a second vote changes the choice, never adds a ballot.
-- **The generator.** Pick a template, type 1–4 lines of at most 120 characters each and preview them as HTML text
-  over the image; a caption is stored as text lines, never as a rendered image.
+- **The generator (M6).** `POST /api/v1/generate { template_slug | topic, lines? }` researches how the format is
+  used right now, writes captions in that voice, and renders a real PNG server-side with the template's own text
+  boxes, bundled DejaVu fonts, outline and wrap. The PNG goes to OpenVibe.Media and the caption keeps its labels
+  and Media id. The older caption page still previews text in HTML over the template.
 
 ## Owns
 
@@ -33,9 +35,10 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
 | `meme_citations` | entry, role `origin\|use\|example`, source service/type/id, stream/VOD/clip/message ids, canonical VOD `offset_seconds`, verbatim `quote_text`, `quote_hash`, canonical `url`, `observed_at`, `source_status` `live\|hidden\|gone` | `0001_initial.sql` |
 | `meme_status_events` | every status change: from, to, reason, who, when | `0001_initial.sql` |
 | `meme_votes` | (`week` `YYYY-Www`, `subject`) → entry; one vote a week | `0001_initial.sql` |
-| `meme_templates` | id, name, `image_url` (openvibe.media or a local data-free placeholder), `box_count`, source, license; three placeholders seeded | `0001_initial.sql` |
-| `meme_captions` | `mcp_` + ULID, subject, template, `lines` jsonb (1–4 plain-text lines), visibility, created | `0001_initial.sql` |
+| `meme_templates` | id, name, `image_url` (openvibe.media or a local data-free placeholder), `box_count`, source, license, `layout` jsonb (text boxes, font, size, colour, outline, align, wrap); three placeholders seeded | `0001_initial.sql`, `0006_generate.sql` |
+| `meme_captions` | `mcp_` + ULID, subject, template, `lines` jsonb (1–4 plain-text lines), visibility, created, L1 `labels`, rendered `media_id` | `0001_initial.sql`, `0006_generate.sql` |
 | `meme_reports` | `mrp_` + ULID, entry, subject, kind `takedown\|correction`, reason, note, status | `0001_initial.sql` |
+| `meme_generate_usage` | per UTC day: generation calls reserved and the cost the runs stated | `0006_generate.sql` |
 | `meme_outbox` | Today's outbox shape: fixed `evt_` id, topic, JSON payload, attempts, last error, claim/backoff lease — the Search document queue | `0001_initial.sql` |
 | `account_data_events` | openvibe-sdk/account-data's export/deletion receipts | `0001_initial.sql` |
 | `telemetry_samples` | aggregated request telemetry, pruned after 14 days | `0001_initial.sql` |
@@ -83,7 +86,8 @@ also gets per-actor minute/hour limits (`MEME_LIMITS_MINUTE`, `MEME_LIMITS_HOUR`
 | `GET /trending?limit=` | public entries, `rising` first, then `peaked`, `classic`, `dead`; last use newest first |
 | `GET /week` | this ISO week's candidates (public entries with a live use that week) and their vote counts |
 | `POST /week/vote` | signed in, same-origin; `{ entry_id }`; upsert per (`week`, subject) — one vote a week |
-| `GET /templates` | the caption templates with their caption counts |
+| `GET /templates` | the caption templates with their caption counts and `layout` |
+| `POST /generate` | signed in; `{ template_slug \| topic, lines? }`; researches current uses, writes captions, renders the template's layout as a PNG, stores it in Media and saves the caption. 201 returns `media_id`, `media_url`, `captions`, `template`, `labels`, `caption`; 503 `meme.ai_unavailable`/`meme.media_unavailable`; 429 `meme.ai_budget` |
 | `POST /captions` | signed in; `{ template_id, lines, visibility? }`, 1–4 lines × 120 chars, blocked words refused |
 | `GET /captions/:id` | one caption; a public read never returns the author's subject |
 | `POST /entries/:slug/report` | signed in; `{ kind: "takedown"\|"correction", reason, note? }`, stored for staff |
@@ -95,6 +99,21 @@ also gets per-actor minute/hour limits (`MEME_LIMITS_MINUTE`, `MEME_LIMITS_HOUR`
 Validation refusals are `400 { code: "meme.invalid", message }`; a blocked caption is
 `400 { code: "meme.blocked_words" }`. Other codes: `meme.sign_in_required`, `meme.staff_required`,
 `meme.cross_site`, `meme.not_found`, `meme.template_not_found`, `meme.origin_gone`, `meme.rate_limited`.
+
+## The generator (M6)
+
+`POST /api/v1/generate` takes a template (`template_slug`, which is the id, slug or name) or a topic. It first runs
+`research.gather` on how the format is actually captioned right now, then `ai.extract` for the lines and the L1
+labels; with `lines` supplied the person's lines are used verbatim and only the labels come from the model. When a
+topic alone is given, the model picks one of the configured templates.
+
+`server/render-png.js` loads the template's `layout` (or a vertical fallback for a template without one), wraps
+each line to its box, shrinks the font until it fits, converts the text to outlines with opentype.js (bundled
+DejaVu Sans and DejaVu Sans Bold under `server/assets/fonts`, Bitstream Vera licence included), strokes the
+outline and fills the text, then composites the SVG over the template artwork with sharp. The PNG is uploaded to
+OpenVibe.Media as a public object; without Media the route answers 503 rather than returning an unstored picture.
+The saved caption carries the labels and the `med_…` id. Two calls per request are reserved against
+`MEME_GENERATE_DAILY_CALLS` (60) and `MEME_GENERATE_DAILY_BUDGET_USD` (5) in `meme_generate_usage`.
 
 ## The importer
 
