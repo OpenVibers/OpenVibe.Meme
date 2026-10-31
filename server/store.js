@@ -71,7 +71,7 @@ function wireCitation(row) {
 
 function wireTemplate(row) {
     if (!row) return null;
-    return { id: row.id, name: row.name, image_url: row.image_url, box_count: Number(row.box_count), source: row.source, license: row.license, created_at: iso(row.created_at) };
+    return { id: row.id, name: row.name, image_url: row.image_url, box_count: Number(row.box_count), source: row.source, license: row.license, layout: row.layout || null, created_at: iso(row.created_at) };
 }
 
 function wireCaption(row) {
