@@ -39,14 +39,19 @@ function provenanceOf(citations) {
     return out;
 }
 
-/** One entry + its live citations → the Search document (or a tombstone when it is not public). */
-function documentOf(entry, citations = [], { baseUrl = 'https://openvibe.meme' } = {}) {
+/** One entry + its live citations + its internet origin → the Search document (or a tombstone). */
+function documentOf(entry, citations = [], { baseUrl = 'https://openvibe.meme', origin = null } = {}) {
     const revision = Math.max(1, Number(entry.revision) || 1);
     if (!entry || entry.visibility !== 'public') return { owner: OWNER, type: TYPE, id: entry.id, revision, deleted: true };
     const live = (citations || []).filter((c) => c.source_status === 'live');
     const sources = [...new Set(live.map((c) => c.source_service))];
-    const body = [entry.title, entry.summary || '', ...live.map((c) => c.quote_text)]
+    const body = [entry.title, entry.summary || '', entry.meaning || '', entry.usage || '',
+        ...(origin && origin.title ? [origin.title] : []), ...live.map((c) => c.quote_text)]
         .filter(Boolean).join('\n').slice(0, 48_000);
+    const provenance = [
+        ...(origin ? [{ service: 'memes', type: 'origin', id: String(origin.url).slice(0, 128), url: origin.url, ...(origin.retrieved_at ? { retrieved_at: iso(origin.retrieved_at) } : {}) }] : []),
+        ...provenanceOf(live),
+    ].slice(0, 50);
     return {
         owner: OWNER,
         type: TYPE,
@@ -58,9 +63,9 @@ function documentOf(entry, citations = [], { baseUrl = 'https://openvibe.meme' }
         title: entry.title,
         ...(entry.summary ? { summary: entry.summary } : {}),
         body,
-        facets: { kind: entry.kind, status: entry.status, source: sources },
-        authorship: 'ai_assisted',
-        provenance: provenanceOf(live),
+        facets: { kind: entry.kind, status: entry.status, scope: entry.scope || 'openvibe', labels: entry.labels || [], source: sources },
+        authorship: entry.submitted_by || (origin && origin.author) ? 'human' : 'ai_assisted',
+        provenance,
         publication_state: 'published',
         published_at: iso(entry.created_at),
         updated_at: iso(entry.updated_at),
@@ -84,7 +89,11 @@ function createSearchIndex({ config, s, baseUrl = config.baseUrl }) {
 
     /** Queue the current document on the caller's transaction (upsert when public, tombstone otherwise). */
     async function sync(t, entry, citations) {
-        const doc = documentOf(entry, citations, { baseUrl });
+        const db = t || s.db;
+        const origin = entry && entry.visibility === 'public'
+            ? await db.maybe('SELECT * FROM meme_origins WHERE entry_id = $1', [entry.id])
+            : null;
+        const doc = documentOf(entry, citations, { baseUrl, origin });
         return await enqueue(doc.deleted ? EVENT_DELETED : EVENT_UPSERTED, doc, t);
     }
 
