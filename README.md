@@ -47,6 +47,10 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
   one structured extraction. It returns the template, the matched entries, origin guesses with a confidence,
   meaning and usage, L1 labels, and for a Reddit URL its spread and the comments' tone. The daily AI budget is
   enforced before any call.
+- **Deep dives (M5).** `POST /api/v1/research { topic }` starts a job that gathers sources with OpenVibe.AI's
+  `research.gather` and writes a long read in which every paragraph cites a numbered source. A read that cites
+  nothing is failed, not published. `GET /api/v1/research/:id` polls it, and the author may save it as a public
+  deep-dive entry.
 - **The generator.** Pick a template, type 1–4 lines of at most 120 characters each and preview them as HTML text
   over the image; a caption is stored as text lines, never as a rendered image.
 
@@ -74,6 +78,9 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
 | `meme_reddit_template_posts` | which posts belong to a template and their hash distance | `0004_trends.sql` |
 | `meme_ai_usage` | per UTC day and kind (`analyze`/`research`/`generate`): AI calls reserved and the cost the run stated | `0005_analyze.sql` |
 | `meme_analyses` | `anl_` + ULID, subject (or null for a public analysis), input URL/Media id, status, the finished result jsonb and its cost | `0005_analyze.sql` |
+| `meme_research` | `rsc_` + ULID, subject, topic, status, title/summary, the Markdown read, numbered sources/facts/citations, cost, error, saved entry slug, times | `0006_research.sql` |
+| `meme_deep_dives` | entry, research job, the full Markdown read and its numbered sources/citations | `0006_research.sql` |
+| `meme_research_usage` | per UTC day: research calls reserved and the cost the runs stated | `0006_research.sql` |
 | `meme_outbox` | Today's outbox shape: fixed `evt_` id, topic, JSON payload, attempts, last error, claim/backoff lease — the Search document queue | `0001_initial.sql` |
 | `account_data_events` | openvibe-sdk/account-data's export/deletion receipts | `0001_initial.sql` |
 | `telemetry_samples` | aggregated request telemetry, pruned after 14 days | `0001_initial.sql` |
@@ -134,6 +141,10 @@ also gets per-actor minute/hour limits (`MEME_LIMITS_MINUTE`, `MEME_LIMITS_HOUR`
 | `GET /moderation/revisions?limit=` | staff: the pending revision queue with each entry's slug and title |
 | `GET /trending?limit=` | public entries, `rising` first, then `peaked`, `classic`, `dead`; last use newest first |
 | `GET /trends?window=day\|week&limit=` | rising Reddit posts with upvote velocity (from score samples), new template clusters and the public entries used in the window; `Cache-Control: public, max-age=120` |
+| `POST /research` | signed in; `{ topic }` starts a deep-dive job (202 + `Location`); 503 without AI, 429 `meme.ai_budget`, 400 for a topic outside 2–300 characters |
+| `GET /research/:id` | the job: queued/running/failed is visible to its author and staff; succeeded is public. Carries the source pack, facts, citations and the Markdown read |
+| `POST /research/:id/entry` | the author or staff save a succeeded read as a public deep-dive entry (201, 200 when already saved) |
+| `GET /entries/:slug/deep-dive` | the saved deep dive's full Markdown, numbered sources and citations |
 | `GET /week` | this ISO week's candidates (public entries with a live use that week) and their vote counts |
 | `POST /week/vote` | signed in, same-origin; `{ entry_id }`; upsert per (`week`, subject) — one vote a week |
 | `GET /templates` | the caption templates with their caption counts |
@@ -219,6 +230,19 @@ tone). Meme matches the answer against its own templates and public entries and 
 entry. `MEME_AI_DAILY_CALLS` (200) and `MEME_AI_DAILY_BUDGET_USD` (5) cap the day; the calls are reserved before
 the first run and the run's stated cost is recorded in `meme_ai_usage`. Reddit credentials are the same
 `MEME_REDDIT_CLIENT_ID`/`MEME_REDDIT_CLIENT_SECRET` as the trends importer.
+## Deep dives (M5)
+
+`POST /api/v1/research` requires a signed-in person and a topic. The job runs `research.gather` (Wikipedia, the
+topic's Fandom wiki, Wikidata, DeepSeek search, Commons/Openverse, as OpenVibe.AI implements it) and then
+`ai.generate` with the numbered evidence pack. The prompt requires a 700–1400 word Markdown read whose every
+paragraph ends with its source numbers. `groundedIssues()` checks that every body paragraph of at least ten words
+has a `[n]` and that every `n` names a gathered source; a read that fails is stored `failed` with
+`meme.research_ungrounded`, never published. The read is public once succeeded. Saving it creates a public entry
+and `meme_deep_dives` keeps its full text for `GET /entries/:slug/deep-dive`.
+
+Two calls per job are reserved against `MEME_RESEARCH_DAILY_CALLS` (40) and `MEME_RESEARCH_DAILY_BUDGET_USD` (5);
+the calls and the runs' stated cost go in `meme_research_usage`. The job is in-process: a restart loses a queued
+job (it stays `running` for the operator to see; there is no retry button yet).
 
 ## The importer
 

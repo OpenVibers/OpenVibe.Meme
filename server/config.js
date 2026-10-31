@@ -140,6 +140,16 @@ function load(env = process.env) {
             maxCandidates: Math.min(30, Math.max(1, int(env.MEME_IMPORTER_MAX_CANDIDATES, 10))),
         },
 
+        // Deep dives (M5): research.gather + ai.generate, with a daily budget of their own. Off without the AI URL
+        // and the Network client secret.
+        research: {
+            aiUrl: trim(env.OV_AI_INTERNAL_URL || env.OV_AI_URL || ''),
+            maxSources: Math.min(20, Math.max(2, int(env.MEME_RESEARCH_MAX_SOURCES, 12))),
+            dailyCalls: Math.max(1, int(env.MEME_RESEARCH_DAILY_CALLS, 40)),
+            dailyBudgetUsd: Math.max(0, Number(env.MEME_RESEARCH_DAILY_BUDGET_USD || 5) || 0),
+            waitMs: Math.max(5_000, int(env.MEME_RESEARCH_WAIT_MS, 180_000)),
+        },
+
         // Every citation is re-verified daily, off under MEME_DRILL.
         reverify: { intervalMs: Math.max(60_000, int(env.MEME_REVERIFY_INTERVAL_MS, 24 * 60 * 60_000)) },
 
