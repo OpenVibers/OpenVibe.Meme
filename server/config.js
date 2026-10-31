@@ -70,6 +70,23 @@ function load(env = process.env) {
             timeoutMs: Math.max(500, int(env.MEME_UPSTREAM_TIMEOUT_MS, 8000)),
         },
 
+        // OpenVibe.AI: the analyzer's vision call (pics.describe_image) and structured extraction (ai.extract),
+        // and later research/generation. Off without OV_AI_INTERNAL_URL and the Network client secret. The daily
+        // budget is checked before any call: calls and the run's stated cost are counted per UTC day.
+        ai: {
+            url: trim(env.OV_AI_INTERNAL_URL || env.OV_AI_URL || ''),
+            dailyCalls: Math.max(1, int(env.MEME_AI_DAILY_CALLS, 200)),
+            dailyBudgetUsd: Math.max(0, Number(env.MEME_AI_DAILY_BUDGET_USD || 5) || 0),
+            waitMs: Math.max(1_000, int(env.MEME_AI_WAIT_MS, 60_000)),
+        },
+
+        // Reddit's official API (OAuth2 client credentials), read for a Reddit post's spread and comments.
+        reddit: {
+            clientId: env.MEME_REDDIT_CLIENT_ID || '',
+            clientSecret: env.MEME_REDDIT_CLIENT_SECRET || '',
+            userAgent: env.MEME_REDDIT_USER_AGENT || 'web:openvibe.meme:v0.3 (by /u/OpenVibe)',
+        },
+
         // The candidate importer: every 30 minutes, off under MEME_DRILL (tests call runOnce()).
         importer: {
             intervalMs: Math.max(60_000, int(env.MEME_IMPORTER_INTERVAL_MS, 30 * 60_000)),

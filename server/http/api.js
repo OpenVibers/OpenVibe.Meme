@@ -29,7 +29,7 @@ const { currentWeek } = require('../week');
 const { KINDS, STATUSES } = require('../store');
 
 function createApi(ctx) {
-    const { config, s, principal, entries } = ctx;
+    const { config, s, principal, entries, analyzer } = ctx;
     const r = asyncRouter();
 
     r.use(express.json({ limit: '64kb' }));
@@ -162,6 +162,21 @@ function createApi(ctx) {
         const out = { ...row, template, mine };
         if (!mine && !staff) delete out.subject;
         return res.json(out);
+    });
+
+    // ── Analyse ─────────────────────────────────────────────
+    // POST /analyze { url | media_id } — the vision call, the structured extraction, the matched entries/template,
+    // origin guesses with confidence, meaning/usage, L1 labels, and a Reddit URL's spread and comments tone.
+    r.post('/analyze', async (req, res) => {
+        const b = req.body && typeof req.body === 'object' ? req.body : {};
+        const out = await analyzer.analyze({
+            url: typeof b.url === 'string' ? b.url : null,
+            mediaId: typeof b.media_id === 'string' ? b.media_id : null,
+            subject: req.principal && req.principal.kind === 'user' ? req.principal.subject : null,
+        });
+        if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'that meme could not be analysed');
+        res.set('Cache-Control', 'private, no-store');
+        return res.json(out.analysis);
     });
 
     // ── Signed-in writes ────────────────────────────────────
