@@ -139,7 +139,7 @@ function createApi(ctx) {
         const staff = isStaff(req.principal);
         const mine = Boolean(row && row.submitted_by && req.principal.kind === 'user' && req.principal.subject === row.submitted_by);
         if (!row || (row.visibility === 'hidden' && !staff && !mine)) return problem(res, 404, 'meme.not_found', 'No such meme.');
-        const out = await entries.detail(row, { staff });
+        const out = await entries.detail(row, { staff: staff || mine });
         const verdict = await entries.judgement(row.id);
         if (row.visibility === 'public') res.set('Cache-Control', 'public, max-age=60');
         else if (row.visibility === 'unlisted') res.set('Cache-Control', 'private, max-age=60');
@@ -158,7 +158,7 @@ function createApi(ctx) {
         const staff = isStaff(req.principal);
         const mine = Boolean(row && row.submitted_by && req.principal.kind === 'user' && req.principal.subject === row.submitted_by);
         if (!row || (row.visibility === 'hidden' && !staff && !mine)) return problem(res, 404, 'meme.not_found', 'No such meme.');
-        const revisions = await entries.revisionsOf(row.id, { staff });
+        const revisions = await entries.revisionsOf(row.id, { staff: staff || mine });
         if (row.visibility === 'public') res.set('Cache-Control', 'public, max-age=60');
         else res.set('Cache-Control', 'private, no-store');
         return res.json({ slug: row.slug, count: revisions.length, revisions });

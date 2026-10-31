@@ -558,7 +558,7 @@ function createStore(s, { search }) {
         if (since) {
             args.push(since);
             usesExpr = `(SELECT COUNT(*)::int FROM meme_citations c WHERE c.entry_id = e.id AND c.source_status = 'live' AND c.observed_at >= $${args.length}::timestamptz)`;
-        } else if (channel != null) {
+        } else if (channel != null || sort === 'top') {
             usesExpr = "(SELECT COUNT(*)::int FROM meme_citations c WHERE c.entry_id = e.id AND c.source_status = 'live')";
         }
         if (kind) { args.push(kind); where += ` AND e.kind = $${args.length}`; }

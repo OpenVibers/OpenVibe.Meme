@@ -49,7 +49,7 @@ function documentOf(entry, citations = [], { baseUrl = 'https://openvibe.meme', 
         ...(origin && origin.title ? [origin.title] : []), ...live.map((c) => c.quote_text)]
         .filter(Boolean).join('\n').slice(0, 48_000);
     const provenance = [
-        ...(origin ? [{ service: 'memes', type: 'origin', id: String(origin.url).slice(0, 128), url: origin.url, ...(origin.retrieved_at ? { retrieved_at: iso(origin.retrieved_at) } : {}) }] : []),
+        ...(origin ? [{ service: 'meme', type: 'origin', id: String(origin.url).slice(0, 128), url: origin.url, ...(origin.retrieved_at ? { retrieved_at: iso(origin.retrieved_at) } : {}) }] : []),
         ...provenanceOf(live),
     ].slice(0, 50);
     return {
