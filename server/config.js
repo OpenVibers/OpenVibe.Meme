@@ -150,6 +150,19 @@ function load(env = process.env) {
             waitMs: Math.max(5_000, int(env.MEME_RESEARCH_WAIT_MS, 180_000)),
         },
 
+        // The generator (M6): research the format's current uses, write captions, render a PNG. Off without AI;
+        // Media is needed to store the PNG. The budget is checked before the first AI call.
+        generate: {
+            aiUrl: trim(env.OV_AI_INTERNAL_URL || env.OV_AI_URL || ''),
+            mediaUrl: trim(env.OV_MEDIA_INTERNAL_URL || env.OV_MEDIA_URL || ''),
+            mediaNamespace: env.MEME_MEDIA_NAMESPACE || 'meme',
+            dailyCalls: Math.max(1, int(env.MEME_GENERATE_DAILY_CALLS, 60)),
+            dailyBudgetUsd: Math.max(0, Number(env.MEME_GENERATE_DAILY_BUDGET_USD || 5) || 0),
+            maxSources: Math.min(10, Math.max(1, int(env.MEME_GENERATE_MAX_SOURCES, 6))),
+            waitMs: Math.max(5_000, int(env.MEME_GENERATE_WAIT_MS, 150_000)),
+            maxPixels: Math.min(4096, Math.max(440, int(env.MEME_GENERATE_MAX_WIDTH, 1600))),
+        },
+
         // Every citation is re-verified daily, off under MEME_DRILL.
         reverify: { intervalMs: Math.max(60_000, int(env.MEME_REVERIFY_INTERVAL_MS, 24 * 60 * 60_000)) },
 

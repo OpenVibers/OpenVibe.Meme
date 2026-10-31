@@ -31,7 +31,7 @@ const { currentWeek } = require('../week');
 const { KINDS, STATUSES, SCOPES, LABELS } = require('../store');
 
 function createApi(ctx) {
-    const { config, s, principal, entries, trends, analyzer, research } = ctx;
+    const { config, s, principal, entries, trends, analyzer, research, generator } = ctx;
     const r = asyncRouter();
 
     r.use(express.json({ limit: '64kb' }));
@@ -270,6 +270,21 @@ function createApi(ctx) {
         res.set('Cache-Control', 'public, max-age=60');
         return res.json({ slug: entry.slug, title: entry.title, ...dive });    });
 
+    // ── Generate (M6) ───────────────────────────────────────
+    // POST /generate { template_slug | topic, lines? } — research current uses, write the captions, render the
+    // template's own PNG with bundled fonts, store it in Media and save the caption with its labels.
+    r.post('/generate', requirePerson, async (req, res) => {
+        const b = req.body && typeof req.body === 'object' ? req.body : {};
+        const out = await generator.generate({
+            templateSlug: typeof b.template_slug === 'string' ? b.template_slug : null,
+            topic: typeof b.topic === 'string' ? b.topic : null,
+            lines: b.lines === undefined ? null : b.lines,
+            subject: req.principal.subject,
+        });
+        if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'the meme could not be generated');
+        res.set('Location', `/api/v1/captions/${out.caption.id}`);
+        return res.status(201).json({ media_id: out.media_id, media_url: out.media_url, captions: out.captions, template: out.template, labels: out.labels, caption: out.caption, cost_usd: out.cost_usd });
+    });
     // ── Signed-in writes ────────────────────────────────────
     r.post('/week/vote', requirePerson, async (req, res) => {
         const entryId = req.body && typeof req.body.entry_id === 'string' ? req.body.entry_id.trim() : '';
