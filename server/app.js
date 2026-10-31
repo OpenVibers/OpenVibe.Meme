@@ -38,6 +38,8 @@ const { createSearchIndex } = require('./search');
 const { createUpstreams } = require('./upstreams');
 const { createImporter } = require('./importer');
 const { createReverifier } = require('./reverify');
+const { createResearchAi } = require('./research-ai');
+const { createResearch } = require('./research');
 const { createNetworkSender } = require('openvibe-sdk/account-data');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -64,6 +66,8 @@ async function createApp(opts = {}) {
     const upstreams = createUpstreams({ config, fetchImpl, log });
     const importer = createImporter({ config, s, entries, upstreams, fetchImpl, log });
     const reverifier = createReverifier({ config, s, entries, upstreams, log });
+    const researchAi = opts.researchAi || createResearchAi({ config, s, fetchImpl, log, client: opts.aiClient });
+    const research = createResearch({ config, s, entries, ai: researchAi, log });
 
     // Account export and deletion (ADR-033). The sender posts to Network's internal routes with this service's own
     // client-credentials token; a test injects a stand-in through opts.accountSend.
@@ -74,6 +78,7 @@ async function createApp(opts = {}) {
 
     const ctx = {
         config, s, keys, sso, principal, search, entries, upstreams, importer, reverifier, accountData, accountSend, log,
+        researchAi, research,
     };
 
     const app = express();

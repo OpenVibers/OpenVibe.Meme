@@ -29,7 +29,7 @@ const { currentWeek } = require('../week');
 const { KINDS, STATUSES } = require('../store');
 
 function createApi(ctx) {
-    const { config, s, principal, entries } = ctx;
+    const { config, s, principal, entries, research } = ctx;
     const r = asyncRouter();
 
     r.use(express.json({ limit: '64kb' }));
@@ -162,6 +162,49 @@ function createApi(ctx) {
         const out = { ...row, template, mine };
         if (!mine && !staff) delete out.subject;
         return res.json(out);
+    });
+
+    // ── Deep dives (M5) ─────────────────────────────────────
+    // POST /research { topic } — start the job; 202 with the id, then GET /research/:id until succeeded or failed.
+    r.post('/research', requirePerson, async (req, res) => {
+        const b = req.body && typeof req.body === 'object' ? req.body : {};
+        const out = await research.create({ topic: b.topic, subject: req.principal.subject });
+        if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'invalid research');
+        res.set('Location', `/api/v1/research/${out.research.id}`);
+        return res.status(202).json(out.research);
+    });
+
+    // A succeeded read is public; a queued/running/failed one is visible to its author and staff only.
+    r.get('/research/:id', async (req, res) => {
+        const row = await research.get(String(req.params.id || ''));
+        if (!row) return problem(res, 404, 'meme.not_found', 'No such research job.');
+        const mine = req.principal.kind === 'user' && row.subject === req.principal.subject;
+        if (row.status !== 'succeeded' && !mine && !isStaff(req.principal)) return problem(res, 404, 'meme.not_found', 'No such research job.');
+        res.set('Cache-Control', row.status === 'succeeded' ? 'public, max-age=60' : 'private, no-store');
+        const out = { ...row };
+        if (!mine && !isStaff(req.principal)) delete out.subject;
+        return res.json(out);
+    });
+
+    // Save a succeeded read as a public deep-dive entry (its full text stays in meme_deep_dives).
+    r.post('/research/:id/entry', requirePerson, async (req, res) => {
+        const row = await research.get(String(req.params.id || ''));
+        if (!row) return problem(res, 404, 'meme.not_found', 'No such research job.');
+        if (row.subject !== req.principal.subject && !isStaff(req.principal)) return problem(res, 403, 'meme.forbidden', 'This research job belongs to someone else.');
+        const out = await research.save({ id: row.id, subject: req.principal.subject, staff: isStaff(req.principal) });
+        if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'the read could not be saved');
+        res.set('Location', `/api/v1/entries/${out.entry.slug}`);
+        return res.status(out.already ? 200 : 201).json({ entry: out.entry, already: Boolean(out.already) });
+    });
+
+    // The full text of a saved deep dive, for the entry page.
+    r.get('/entries/:slug/deep-dive', async (req, res) => {
+        const entry = await entries.bySlug(String(req.params.slug || ''));
+        if (!entry || entry.visibility !== 'public') return problem(res, 404, 'meme.not_found', 'No such deep dive.');
+        const dive = await research.deepDiveFor(entry.id);
+        if (!dive) return problem(res, 404, 'meme.not_found', 'No deep dive for that entry.');
+        res.set('Cache-Control', 'public, max-age=60');
+        return res.json({ slug: entry.slug, title: entry.title, ...dive });
     });
 
     // ── Signed-in writes ────────────────────────────────────
