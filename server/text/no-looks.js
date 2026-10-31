@@ -1,21 +1,18 @@
 'use strict';
 
 /**
- * No looks in public AI text (the network rule, openvibe-sdk/no-looks, shared with Live, Community and MediaHub):
- * an AI-written summary never describes a person's body, clothing, hair, face or guessed gender. A summary that
- * names looks at all is not repaired word by word — it is replaced by the entry's title, as Meme's plan says.
- * Verbatim quotes are never passed through this: rewriting a quote would falsify the citation.
+ * L24 (the light rules): AI text is stored as written. The owner retired the looks filter on 2026-10-31 ("there
+ * should be no reason it can't describe people … remove all that crap"), so there is no `noLooks` call here any
+ * more; a summary that describes a person's body, clothing or hair is kept. Labels describe content; they never
+ * ban it. Verbatim quotes were never passed through a filter and still are not.
+ *
+ * The module keeps its old name so existing callers and scripts do not break; `cleanSummary` now only trims and
+ * falls back to the title for an empty summary.
  */
-const { noLooks, hasLooks } = require('openvibe-sdk/no-looks');
-
-/** The summary to store for an AI-written entry summary. */
 function cleanSummary(title, summary) {
     const t = String(title || '').trim() || 'Untitled meme';
-    const s = String(summary == null ? '' : summary).trim();
-    if (!s) return t;
-    if (hasLooks(s)) return t;
-    const cleaned = String(noLooks(s) || '').trim();
-    return cleaned || t;
+    const s = String(summary == null ? '' : summary).replace(/\s+/g, ' ').trim();
+    return s || t;
 }
 
-module.exports = { cleanSummary, noLooks, hasLooks };
+module.exports = { cleanSummary };
