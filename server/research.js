@@ -177,10 +177,14 @@ function createResearch({ config, s, entries, ai, log = console }) {
             const existing = await entries.bySlug(row.entry_slug);
             return { ok: true, entry: existing ? entries.wireEntry(existing) : null, already: true };
         }
-        const created = await entries.createCandidate({
-            slug: slugify(row.title || row.topic), title: row.title || row.topic, kind: 'meme', status: 'classic',
+        const base = {
+            slug: slugify(row.title || row.topic), title: row.title || row.topic, status: 'classic',
             summary: row.summary || row.topic, first_seen_at: s.iso(), last_seen_at: s.iso(), visibility: 'public', citations: [],
-        });
+        };
+        // M2 knows the `deep_dive` kind; a database without it still gets a normal public entry.
+        let created;
+        try { created = await entries.createCandidate({ ...base, kind: 'deep_dive' }); }
+        catch { created = await entries.createCandidate({ ...base, kind: 'meme' }); }
         // M2's scope column marks the encyclopedia; on a database without it the update is a harmless no-op.
         try {
             await s.db.exec("UPDATE meme_entries SET scope = 'internet', revision = revision + 1, updated_at = now() WHERE id = $1", [created.entry.id]);
