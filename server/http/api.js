@@ -14,6 +14,8 @@
  *   GET    /captions/:id                          one saved caption
  *   POST   /entries/:slug/report                  a takedown/correction report (signed in)
  *   GET    /reports                               open reports (staff)
+ *   GET    /staff/candidates                      the hidden candidates with the judge's score (staff)
+ *   GET    /staff/candidates/:slug                one candidate: its judgement, citations and decisions (staff)
  *   POST   /entries/:slug/publish|hide            staff
  *   PATCH  /entries/:slug                         staff: title, kind, status
  *
@@ -116,6 +118,7 @@ function createApi(ctx) {
         const staff = isStaff(req.principal);
         if (!row || (row.visibility === 'hidden' && !staff)) return problem(res, 404, 'meme.not_found', 'No such meme.');
         const citations = await entries.citations(row.id);
+        const verdict = await entries.judgement(row.id);
         if (row.visibility === 'public') res.set('Cache-Control', 'public, max-age=60');
         else if (row.visibility === 'unlisted') res.set('Cache-Control', 'private, max-age=60');
         return res.json({
@@ -124,6 +127,9 @@ function createApi(ctx) {
             citations,
             timeline: citations.filter((c) => c.role !== 'example'),
             examples: citations.filter((c) => c.role === 'example'),
+            // The judge's own words about the entry: where it started and how people use it.
+            ...(verdict && verdict.origin ? { notes: { origin: verdict.origin, spread: verdict.spread, examples: verdict.examples } } : {}),
+            ...(staff && verdict ? { judgement: { score: verdict.score, reason: verdict.reason, judged_at: verdict.judged_at, model: verdict.model, provider: verdict.provider } } : {}),
         });
     });
 
@@ -224,6 +230,33 @@ function createApi(ctx) {
     r.get('/reports', requireStaff, async (req, res) => {
         const reports = await entries.listOpenReports({ limit: asInt(req.query.limit, 100) });
         return res.json({ count: reports.length, reports });
+    });
+
+    // ── The staff list: the candidates that stayed hidden ──
+    r.get('/staff/candidates', requireStaff, async (req, res) => {
+        const limit = asInt(req.query.limit, 100);
+        const kind = typeof req.query.kind === 'string' && req.query.kind ? req.query.kind : null;
+        if (kind && !KINDS.includes(kind)) return invalid(res, `kind must be one of ${KINDS.join(', ')}`);
+        const list = await entries.listHidden({ limit, kind });
+        return res.json({ count: list.length, candidates: list });
+    });
+
+    r.get('/staff/candidates/:slug', requireStaff, async (req, res) => {
+        const row = await entries.bySlug(String(req.params.slug || ''));
+        if (!row) return problem(res, 404, 'meme.not_found', 'No such meme.');
+        const [citations, verdict, history] = await Promise.all([
+            entries.citations(row.id),
+            entries.judgement(row.id),
+            entries.decisions(row.id),
+        ]);
+        return res.json({
+            ...entries.wireEntry(row),
+            score: verdict ? verdict.score : null,
+            reason: verdict ? verdict.reason : null,
+            judgement: verdict,
+            citations,
+            decisions: history,
+        });
     });
 
     return r;

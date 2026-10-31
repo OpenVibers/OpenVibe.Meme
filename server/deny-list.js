@@ -5,9 +5,14 @@
  * 404 anonymously; clip 483 is Live's AI auto-clip of sexual content (server/ai/explicit.js), and VOD 5709 has no
  * public row at all. A citation that would carry either id is dropped before it is written, and the seed script and
  * the importer both call this filter. No title, thumbnail or quote from either ever enters the database.
+ *
+ * The list also names the words no AI-written entry text may carry. A verbatim quote is never rewritten (that would
+ * falsify the citation), but a title, a summary, an origin note and an example are the site's own words: they pass
+ * this filter before they are stored, and an entry whose text carries one is never published.
  */
 const DENIED_VOD_IDS = Object.freeze(new Set([5709]));
 const DENIED_CLIP_IDS = Object.freeze(new Set([483]));
+const DENIED_WORDS = Object.freeze(['nigger', 'faggot', 'retard', 'kys', 'rape', 'pedo', 'nazi']);
 
 function num(v) {
     if (v == null || v === '') return null;
@@ -35,4 +40,16 @@ function allowed(uses) {
     return (Array.isArray(uses) ? uses : []).filter((u) => !isDenied(u));
 }
 
-module.exports = { DENIED_VOD_IDS, DENIED_CLIP_IDS, isDenied, isDeniedVod, isDeniedClip, allowed };
+/** True when a text carries a word the deny list names. The word must stand on its own. */
+function hasDeniedWord(text) {
+    const s = String(text == null ? '' : text);
+    if (!s) return false;
+    return DENIED_WORDS.some((w) => new RegExp(`(^|[^a-z0-9])${w}([^a-z0-9]|$)`, 'i').test(s));
+}
+
+/** The text of a field the site's own words carry: clean when it names nothing on the deny list. */
+function isCleanText(text) {
+    return !hasDeniedWord(text);
+}
+
+module.exports = { DENIED_VOD_IDS, DENIED_CLIP_IDS, DENIED_WORDS, isDenied, isDeniedVod, isDeniedClip, allowed, hasDeniedWord, isCleanText };
