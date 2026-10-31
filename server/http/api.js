@@ -31,7 +31,7 @@ const { currentWeek } = require('../week');
 const { KINDS, STATUSES, SCOPES, LABELS } = require('../store');
 
 function createApi(ctx) {
-    const { config, s, principal, entries } = ctx;
+    const { config, s, principal, entries, trends } = ctx;
     const r = asyncRouter();
 
     r.use(express.json({ limit: '64kb' }));
@@ -170,6 +170,18 @@ function createApi(ctx) {
         const rows = await entries.trending({ limit });
         res.set('Cache-Control', 'public, max-age=60');
         return res.json({ count: rows.length, entries: rows });
+    });
+
+    // GET /trends?window=day|week — rising Reddit posts (official API data) with upvote velocity, the templates
+    // their pictures reveal, and the public entries used in the same window.
+    r.get('/trends', async (req, res) => {
+        const window = req.query.window == null || req.query.window === '' ? 'day' : String(req.query.window);
+        if (!['day', 'week'].includes(window)) return invalid(res, 'window must be day or week');
+        const limit = req.query.limit == null || req.query.limit === '' ? 50 : Number.parseInt(req.query.limit, 10);
+        if (!Number.isFinite(limit) || limit < 1 || limit > 100) return invalid(res, 'limit must be from 1 to 100');
+        const out = await trends.read({ window, limit });
+        res.set('Cache-Control', 'public, max-age=120');
+        return res.json(out);
     });
 
     r.get('/week', async (req, res) => {

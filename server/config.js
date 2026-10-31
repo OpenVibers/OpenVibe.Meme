@@ -97,6 +97,34 @@ function load(env = process.env) {
             contextLines: Math.max(1, int(env.MEME_JUDGE_CONTEXT_LINES, 6)),
         },
 
+        // OpenVibe.Media for a trend picture or a generated meme (object API v2, namespace `meme`). Off without
+        // the internal URL and Network client secret; tests inject a stand-in.
+        media: {
+            url: trim(env.OV_MEDIA_INTERNAL_URL || env.OV_MEDIA_URL || ''),
+            namespace: env.MEME_MEDIA_NAMESPACE || 'meme',
+        },
+
+        // Reddit's official API only (OAuth2 client credentials). The importer is off when either credential is
+        // missing; tests inject a local Reddit.
+        reddit: {
+            clientId: env.MEME_REDDIT_CLIENT_ID || '',
+            clientSecret: env.MEME_REDDIT_CLIENT_SECRET || '',
+            userAgent: env.MEME_REDDIT_USER_AGENT || 'web:openvibe.meme:v0.2 (by /u/OpenVibe)',
+            subreddits: String(env.MEME_REDDIT_SUBREDDITS || 'memes,dankmemes,MemeEconomy,wholesomememes')
+                .split(',').map((x) => x.trim().replace(/^\/?r\//i, '')).filter(Boolean).slice(0, 12),
+            intervalMs: Math.max(60_000, int(env.MEME_REDDIT_INTERVAL_MS, 15 * 60_000)),
+            maxPosts: Math.min(100, Math.max(1, int(env.MEME_REDDIT_MAX_POSTS, 100))),
+            minTemplatePosts: Math.min(20, Math.max(2, int(env.MEME_REDDIT_MIN_TEMPLATE_POSTS, 3))),
+            maxImageBytes: Math.min(20 * 1024 * 1024, Math.max(64 * 1024, int(env.MEME_REDDIT_MAX_IMAGE_BYTES, 8 * 1024 * 1024))),
+        },
+
+        // Register the Reddit source with OpenVibe.Sources (sources.source.manage) when asked. Off by default:
+        // a registry entry is a permission decision, not something a process should do on every boot.
+        sources: {
+            url: trim(env.OV_SOURCES_INTERNAL_URL || ''),
+            register: env.MEME_SOURCES_REGISTER === '1' || env.MEME_SOURCES_REGISTER === 'true',
+        },
+
         // The candidate importer: every 30 minutes, off under MEME_DRILL (tests call runOnce()).
         importer: {
             intervalMs: Math.max(60_000, int(env.MEME_IMPORTER_INTERVAL_MS, 30 * 60_000)),
