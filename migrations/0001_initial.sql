@@ -9,7 +9,7 @@ CREATE TABLE meme_entries (
     slug          text COLLATE "C" NOT NULL UNIQUE,          -- /m/<slug>
     title         text NOT NULL,
     kind          text COLLATE "C" NOT NULL,                 -- joke | catchphrase | bit | meme | saga
-    summary       text,                                      -- AI-written, noLooks-cleaned; replaced by title when it names looks
+    summary       text,                                      -- AI-written, stored as written (describing people is fine)
     status        text COLLATE "C" NOT NULL DEFAULT 'rising',-- rising | peaked | classic | dead
     status_since  timestamptz NOT NULL DEFAULT now(),
     first_seen_at timestamptz NOT NULL,

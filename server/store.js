@@ -10,7 +10,6 @@
  */
 const crypto = require('crypto');
 const { isDenied } = require('./deny-list');
-const { cleanSummary } = require('./text/no-looks');
 const { weekBounds } = require('./week');
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -289,7 +288,7 @@ function createStore(s, { search }) {
             const row = await q(tx).maybe(
                 `INSERT INTO meme_entries (id, slug, title, kind, summary, status, status_since, first_seen_at, last_seen_at, visibility, revision, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8::timestamptz, $9::timestamptz, $10, 1, now(), now()) RETURNING *`,
-                [id, cleanSlug, cleanTitle, kind, cleanSummary(cleanTitle, summary), status, iso(last), first, last, visibility],
+                [id, cleanSlug, cleanTitle, kind, (String(summary == null ? '' : summary).trim() || cleanTitle), status, iso(last), first, last, visibility],
             );
             const added = await addCitations(row.id, cites, tx);
             const entry = wireEntry(row);

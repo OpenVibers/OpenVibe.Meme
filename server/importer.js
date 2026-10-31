@@ -12,7 +12,6 @@
  */
 const { parseApiTime } = require('./upstreams');
 const { isDenied } = require('./deny-list');
-const { cleanSummary } = require('./text/no-looks');
 const { slugify } = require('./store');
 
 const MIN_WORDS = 3;
@@ -236,7 +235,7 @@ function createImporter({ config, s, entries, upstreams, fetchImpl = globalThis.
                 const firstSeen = cites.reduce((m, c) => (Date.parse(c.observed_at) < Date.parse(m) ? c.observed_at : m), cites[0].observed_at);
                 const lastSeen = cites.reduce((m, c) => (Date.parse(c.observed_at) > Date.parse(m) ? c.observed_at : m), cites[0].observed_at);
                 const title = displayTitle(candidate.phrase);
-                const summary = cleanSummary(title, `"${title}" recurs in ${cites.length} moments across ${new Set(cites.map((c) => utcDay(c.observed_at))).size} days on OpenVibe, from ${firstSeen.slice(0, 10)} to ${lastSeen.slice(0, 10)}.${hints.includes(candidate.phrase) ? ' Chat\'s timeline names it too.' : ''}`);
+                const summary = (String(`"${title}" recurs in ${cites.length} moments across ${new Set(cites.map((c) => utcDay(c.observed_at))).size} days on OpenVibe, from ${firstSeen.slice(0, 10)} to ${lastSeen.slice(0, 10)}.${hints.includes(candidate.phrase) ? ' Chat\'s timeline names it too.' : ''}`).trim() || title);
                 const existing = await entries.bySlug(slugify(title));
                 if (existing) {
                     const r = await entries.enrich(existing.id, { first_seen_at: firstSeen, last_seen_at: lastSeen, cites });
