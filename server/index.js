@@ -21,6 +21,7 @@ function createLifecycle({ server, ctx, exit, signals, timers = [], extra = [] }
             () => ctx.keys.client.stop(),
             () => ctx.importer.stop(),
             () => ctx.reverifier.stop(),
+            () => ctx.reddit.stop(),
             async () => { clearInterval(ctx.telemetryTick); if (ctx.retention) await ctx.retention.stop(); if (ctx.telemetry) await ctx.telemetry.stop(); },
             () => ctx.s.close(),
             ...extra,
@@ -50,6 +51,9 @@ async function start() {
     // Jobs. Each refuses to start under MEME_DRILL; tests call their runOnce().
     ctx.importer.start();
     ctx.reverifier.start();
+    ctx.reddit.start();
+    // The Reddit source is created disabled in Sources, once, when the owner asks (MEME_SOURCES_REGISTER=1).
+    if (!config.drill) ctx.sourceRegistration.ensure().catch(() => {});
 
     // The two account topics (export_requested, deleted) at OpenVibe.Events: idempotent; off without the URL, the
     // delivery secret and the client secret. The consumer itself is mounted in server/app.js.

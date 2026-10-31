@@ -22,6 +22,10 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
 - **The citation is checked again.** A daily job reads every public citation URL; a 404/410 marks it `gone`, a
   401/403 marks it `hidden`, and an entry whose origin is gone is hidden (revision +1, Search tombstone).
 - **Meme of the week.** People vote once per ISO week; a second vote changes the choice, never adds a ballot.
+- **Trends (M3).** Reddit's official API (OAuth2 client credentials, the four permitted subreddits, no scraping)
+  records a score sample per post; `/api/v1/trends?window=day|week` ranks posts by upvote velocity, lists the
+  templates a repeated perceptual hash reveals, and the public entries used in the same window. The importer is
+  off when `MEME_REDDIT_CLIENT_ID`/`MEME_REDDIT_CLIENT_SECRET` are missing.
 - **The generator.** Pick a template, type 1–4 lines of at most 120 characters each and preview them as HTML text
   over the image; a caption is stored as text lines, never as a rendered image.
 
@@ -36,6 +40,10 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
 | `meme_templates` | id, name, `image_url` (openvibe.media or a local data-free placeholder), `box_count`, source, license; three placeholders seeded | `0001_initial.sql` |
 | `meme_captions` | `mcp_` + ULID, subject, template, `lines` jsonb (1–4 plain-text lines), visibility, created | `0001_initial.sql` |
 | `meme_reports` | `mrp_` + ULID, entry, subject, kind `takedown\|correction`, reason, note, status | `0001_initial.sql` |
+| `meme_reddit_posts` | one Reddit post: id `t3_…`, subreddit, title, permalink, source URL, author, score, comments, over-18, dHash, Media id, created/last seen | `0003_trends.sql` |
+| `meme_reddit_samples` | one score observation per post per run; velocity is computed from these, never from one score | `0003_trends.sql` |
+| `meme_reddit_templates` | a dHash cluster repeated across posts: label, representative picture, Media id, post count, first/last seen | `0003_trends.sql` |
+| `meme_reddit_template_posts` | which posts belong to a template and their hash distance | `0003_trends.sql` |
 | `meme_outbox` | Today's outbox shape: fixed `evt_` id, topic, JSON payload, attempts, last error, claim/backoff lease — the Search document queue | `0001_initial.sql` |
 | `account_data_events` | openvibe-sdk/account-data's export/deletion receipts | `0001_initial.sql` |
 | `telemetry_samples` | aggregated request telemetry, pruned after 14 days | `0001_initial.sql` |
@@ -81,6 +89,7 @@ also gets per-actor minute/hour limits (`MEME_LIMITS_MINUTE`, `MEME_LIMITS_HOUR`
 | `GET /entries/:slug` | one entry with `origin`, every `citation`, the use `timeline` and `examples`; a hidden one is 404 unless staff |
 | `GET /entries/:slug/series?days=30` | uses per UTC day, zero-filled, 1–365 days |
 | `GET /trending?limit=` | public entries, `rising` first, then `peaked`, `classic`, `dead`; last use newest first |
+| `GET /trends?window=day\|week&limit=` | rising Reddit posts with upvote velocity (from score samples), new template clusters and the public entries used in the window; `Cache-Control: public, max-age=120` |
 | `GET /week` | this ISO week's candidates (public entries with a live use that week) and their vote counts |
 | `POST /week/vote` | signed in, same-origin; `{ entry_id }`; upsert per (`week`, subject) — one vote a week |
 | `GET /templates` | the caption templates with their caption counts |
@@ -95,6 +104,21 @@ also gets per-actor minute/hour limits (`MEME_LIMITS_MINUTE`, `MEME_LIMITS_HOUR`
 Validation refusals are `400 { code: "meme.invalid", message }`; a blocked caption is
 `400 { code: "meme.blocked_words" }`. Other codes: `meme.sign_in_required`, `meme.staff_required`,
 `meme.cross_site`, `meme.not_found`, `meme.template_not_found`, `meme.origin_gone`, `meme.rate_limited`.
+
+## Trends (M3)
+
+`server/reddit.js` reads `oauth.reddit.com` with this app's own OAuth2 client-credentials token and a User-Agent
+that names it. The official API is the only Reddit path: no page, login or captcha wall is touched. Each run
+reads `/r/<sub>/top?t=day` for the subreddits in `MEME_REDDIT_SUBREDDITS` (default r/memes, r/dankmemes,
+r/MemeEconomy and r/wholesomememes), upserts the posts, appends a score sample, and dHashes the picture with
+`sharp` (9×8 grayscale, 64-bit). Equal-enough hashes are grouped; a group of at least
+`MEME_REDDIT_MIN_TEMPLATE_POSTS` distinct posts becomes a `meme_reddit_templates` row, and the picture is
+uploaded to OpenVibe.Media when `OV_MEDIA_INTERNAL_URL` and the Network client secret are set. Without the Reddit
+credentials the importer is off, and the read still serves whatever was recorded before.
+
+`server/source-registration.js` creates the registry row in OpenVibe.Sources (`meme-reddit`, disabled, with its
+terms and robots notes) once when `MEME_SOURCES_REGISTER=1` and `OV_SOURCES_INTERNAL_URL` are set; it never
+overwrites an existing row. The row documents where the data comes from; Meme's importer owns the OAuth exchange.
 
 ## The importer
 
