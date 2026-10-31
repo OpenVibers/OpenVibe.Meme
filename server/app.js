@@ -46,6 +46,9 @@ const { createMediaStore } = require('./media');
 const { createTrends } = require('./trends');
 const { createRedditTrends } = require('./reddit');
 const { createSourceRegistration } = require('./source-registration');
+const { createAiRunner } = require('./ai');
+const { createRedditReader } = require('./reddit-read');
+const { createAnalyzer } = require('./analyze');
 const { createNetworkSender } = require('openvibe-sdk/account-data');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -83,6 +86,9 @@ async function createApp(opts = {}) {
     const trends = createTrends({ s });
     const reddit = createRedditTrends({ config, s, media, fetchImpl, log, ...(opts.reddit || {}) });
     const sourceRegistration = createSourceRegistration({ config, fetchImpl, log });
+    const aiRunner = opts.ai || createAiRunner({ config, s, fetchImpl, log, client: opts.aiClient, budget: opts.aiBudget });
+    const redditReader = opts.redditReader || createRedditReader({ config, fetchImpl, ...(opts.redditRead || {}) });
+    const analyzer = createAnalyzer({ config, s, ai: aiRunner, reddit: redditReader, fetchImpl, log });
 
     // Account export and deletion (ADR-033). The sender posts to Network's internal routes with this service's own
     // client-credentials token; a test injects a stand-in through opts.accountSend.
@@ -95,6 +101,7 @@ async function createApp(opts = {}) {
         config, s, keys, sso, principal, search, entries, upstreams, importer, reverifier, accountData, accountSend, log,
         ai, context, judge, judgeJob,
         media, trends, reddit, sourceRegistration,
+        aiRunner, redditReader, analyzer,
     };
 
     const app = express();

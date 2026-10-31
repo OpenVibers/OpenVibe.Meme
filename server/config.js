@@ -83,6 +83,11 @@ function load(env = process.env) {
             pollMs: Math.max(100, int(env.MEME_AI_POLL_MS, 1500)),
             maxTokens: Math.max(200, int(env.MEME_AI_MAX_TOKENS, 1400)),
             temperature: 0.2,
+            // The analyzer's runner (M4): off without an explicit AI URL, so a Meme without AI answers
+            // meme.ai_unavailable instead of calling an address that is not there.
+            runnerUrl: trim(env.OV_AI_INTERNAL_URL || env.OV_AI_URL || ''),
+            dailyCalls: Math.max(1, int(env.MEME_AI_DAILY_CALLS, 200)),
+            dailyBudgetUsd: Math.max(0, Number(env.MEME_AI_DAILY_BUDGET_USD || 5) || 0),
         },
 
         // The judge: it scores a candidate from its own citations and writes the entry. Only what clears the bar is
@@ -109,7 +114,7 @@ function load(env = process.env) {
         reddit: {
             clientId: env.MEME_REDDIT_CLIENT_ID || '',
             clientSecret: env.MEME_REDDIT_CLIENT_SECRET || '',
-            userAgent: env.MEME_REDDIT_USER_AGENT || 'web:openvibe.meme:v0.2 (by /u/OpenVibe)',
+            userAgent: env.MEME_REDDIT_USER_AGENT || 'web:openvibe.meme:v0.3 (by /u/OpenVibe)',
             subreddits: String(env.MEME_REDDIT_SUBREDDITS || 'memes,dankmemes,MemeEconomy,wholesomememes')
                 .split(',').map((x) => x.trim().replace(/^\/?r\//i, '')).filter(Boolean).slice(0, 12),
             intervalMs: Math.max(60_000, int(env.MEME_REDDIT_INTERVAL_MS, 15 * 60_000)),

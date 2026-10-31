@@ -43,6 +43,10 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
   records a score sample per post; `/api/v1/trends?window=day|week` ranks posts by upvote velocity, lists the
   templates a repeated perceptual hash reveals, and the public entries used in the same window. The importer is
   off when `MEME_REDDIT_CLIENT_ID`/`MEME_REDDIT_CLIENT_SECRET` are missing.
+- **Analyse (M4).** `POST /api/v1/analyze { url | media_id }` sends the picture to OpenVibe.AI's vision call and
+  one structured extraction. It returns the template, the matched entries, origin guesses with a confidence,
+  meaning and usage, L1 labels, and for a Reddit URL its spread and the comments' tone. The daily AI budget is
+  enforced before any call.
 - **The generator.** Pick a template, type 1–4 lines of at most 120 characters each and preview them as HTML text
   over the image; a caption is stored as text lines, never as a rendered image.
 
@@ -68,6 +72,8 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
 | `meme_reddit_samples` | one score observation per post per run; velocity is computed from these, never from one score | `0004_trends.sql` |
 | `meme_reddit_templates` | a dHash cluster repeated across posts: label, representative picture, Media id, post count, first/last seen | `0004_trends.sql` |
 | `meme_reddit_template_posts` | which posts belong to a template and their hash distance | `0004_trends.sql` |
+| `meme_ai_usage` | per UTC day and kind (`analyze`/`research`/`generate`): AI calls reserved and the cost the run stated | `0005_analyze.sql` |
+| `meme_analyses` | `anl_` + ULID, subject (or null for a public analysis), input URL/Media id, status, the finished result jsonb and its cost | `0005_analyze.sql` |
 | `meme_outbox` | Today's outbox shape: fixed `evt_` id, topic, JSON payload, attempts, last error, claim/backoff lease — the Search document queue | `0001_initial.sql` |
 | `account_data_events` | openvibe-sdk/account-data's export/deletion receipts | `0001_initial.sql` |
 | `telemetry_samples` | aggregated request telemetry, pruned after 14 days | `0001_initial.sql` |
@@ -201,6 +207,18 @@ credentials the importer is off, and the read still serves whatever was recorded
 `server/source-registration.js` creates the registry row in OpenVibe.Sources (`meme-reddit`, disabled, with its
 terms and robots notes) once when `MEME_SOURCES_REGISTER=1` and `OV_SOURCES_INTERNAL_URL` are set; it never
 overwrites an existing row. The row documents where the data comes from; Meme's importer owns the OAuth exchange.
+## Analyse (M4)
+
+`POST /api/v1/analyze` accepts exactly one of `url` (a public http(s) URL) or `media_id` (a `med_…` object). For a
+Reddit URL it reads the post and its top comments through the official API (`server/reddit-read.js`); any other URL
+is treated as the picture, and a Media id is resolved to `https://openvibe.media/o/<id>`.
+
+It then makes two OpenVibe.AI runs: `pics.describe_image` (vision: alt, caption, tags) and `ai.extract` (one
+structured answer: template, meaning, usage, labels, origin guesses with confidence, similar formats, comment
+tone). Meme matches the answer against its own templates and public entries and never lets the model write an
+entry. `MEME_AI_DAILY_CALLS` (200) and `MEME_AI_DAILY_BUDGET_USD` (5) cap the day; the calls are reserved before
+the first run and the run's stated cost is recorded in `meme_ai_usage`. Reddit credentials are the same
+`MEME_REDDIT_CLIENT_ID`/`MEME_REDDIT_CLIENT_SECRET` as the trends importer.
 
 ## The importer
 
