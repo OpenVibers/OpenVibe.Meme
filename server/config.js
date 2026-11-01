@@ -83,6 +83,11 @@ function load(env = process.env) {
             pollMs: Math.max(100, int(env.MEME_AI_POLL_MS, 1500)),
             maxTokens: Math.max(200, int(env.MEME_AI_MAX_TOKENS, 1400)),
             temperature: 0.2,
+            // The analyzer's runner (M4): off without an explicit AI URL, so a Meme without AI answers
+            // meme.ai_unavailable instead of calling an address that is not there.
+            runnerUrl: trim(env.OV_AI_INTERNAL_URL || env.OV_AI_URL || ''),
+            dailyCalls: Math.max(1, int(env.MEME_AI_DAILY_CALLS, 200)),
+            dailyBudgetUsd: Math.max(0, Number(env.MEME_AI_DAILY_BUDGET_USD || 5) || 0),
         },
 
         // The judge: it scores a candidate from its own citations and writes the entry. Only what clears the bar is
@@ -97,6 +102,34 @@ function load(env = process.env) {
             contextLines: Math.max(1, int(env.MEME_JUDGE_CONTEXT_LINES, 6)),
         },
 
+        // OpenVibe.Media for a trend picture or a generated meme (object API v2, namespace `meme`). Off without
+        // the internal URL and Network client secret; tests inject a stand-in.
+        media: {
+            url: trim(env.OV_MEDIA_INTERNAL_URL || env.OV_MEDIA_URL || ''),
+            namespace: env.MEME_MEDIA_NAMESPACE || 'meme',
+        },
+
+        // Reddit's official API only (OAuth2 client credentials). The importer is off when either credential is
+        // missing; tests inject a local Reddit.
+        reddit: {
+            clientId: env.MEME_REDDIT_CLIENT_ID || '',
+            clientSecret: env.MEME_REDDIT_CLIENT_SECRET || '',
+            userAgent: env.MEME_REDDIT_USER_AGENT || 'web:openvibe.meme:v0.3 (by /u/OpenVibe)',
+            subreddits: String(env.MEME_REDDIT_SUBREDDITS || 'memes,dankmemes,MemeEconomy,wholesomememes')
+                .split(',').map((x) => x.trim().replace(/^\/?r\//i, '')).filter(Boolean).slice(0, 12),
+            intervalMs: Math.max(60_000, int(env.MEME_REDDIT_INTERVAL_MS, 15 * 60_000)),
+            maxPosts: Math.min(100, Math.max(1, int(env.MEME_REDDIT_MAX_POSTS, 100))),
+            minTemplatePosts: Math.min(20, Math.max(2, int(env.MEME_REDDIT_MIN_TEMPLATE_POSTS, 3))),
+            maxImageBytes: Math.min(20 * 1024 * 1024, Math.max(64 * 1024, int(env.MEME_REDDIT_MAX_IMAGE_BYTES, 8 * 1024 * 1024))),
+        },
+
+        // Register the Reddit source with OpenVibe.Sources (sources.source.manage) when asked. Off by default:
+        // a registry entry is a permission decision, not something a process should do on every boot.
+        sources: {
+            url: trim(env.OV_SOURCES_INTERNAL_URL || ''),
+            register: env.MEME_SOURCES_REGISTER === '1' || env.MEME_SOURCES_REGISTER === 'true',
+        },
+
         // The candidate importer: every 30 minutes, off under MEME_DRILL (tests call runOnce()).
         importer: {
             intervalMs: Math.max(60_000, int(env.MEME_IMPORTER_INTERVAL_MS, 30 * 60_000)),
@@ -105,6 +138,37 @@ function load(env = process.env) {
             maxTopics: Math.min(50, Math.max(1, int(env.MEME_IMPORTER_MAX_TOPICS, 12))),
             maxVods: Math.min(50, Math.max(1, int(env.MEME_IMPORTER_MAX_VODS, 12))),
             maxCandidates: Math.min(30, Math.max(1, int(env.MEME_IMPORTER_MAX_CANDIDATES, 10))),
+        },
+
+        // Deep dives (M5): research.gather + ai.generate, with a daily budget of their own. Off without the AI URL
+        // and the Network client secret.
+        research: {
+            aiUrl: trim(env.OV_AI_INTERNAL_URL || env.OV_AI_URL || ''),
+            maxSources: Math.min(20, Math.max(2, int(env.MEME_RESEARCH_MAX_SOURCES, 12))),
+            dailyCalls: Math.max(1, int(env.MEME_RESEARCH_DAILY_CALLS, 40)),
+            dailyBudgetUsd: Math.max(0, Number(env.MEME_RESEARCH_DAILY_BUDGET_USD || 5) || 0),
+            waitMs: Math.max(5_000, int(env.MEME_RESEARCH_WAIT_MS, 180_000)),
+        },
+
+        // The generator (M6): research the format's current uses, write captions, render a PNG. Off without AI;
+        // Media is needed to store the PNG. The budget is checked before the first AI call.
+        generate: {
+            aiUrl: trim(env.OV_AI_INTERNAL_URL || env.OV_AI_URL || ''),
+            mediaUrl: trim(env.OV_MEDIA_INTERNAL_URL || env.OV_MEDIA_URL || ''),
+            mediaNamespace: env.MEME_MEDIA_NAMESPACE || 'meme',
+            dailyCalls: Math.max(1, int(env.MEME_GENERATE_DAILY_CALLS, 60)),
+            dailyBudgetUsd: Math.max(0, Number(env.MEME_GENERATE_DAILY_BUDGET_USD || 5) || 0),
+            maxSources: Math.min(10, Math.max(1, int(env.MEME_GENERATE_MAX_SOURCES, 6))),
+            waitMs: Math.max(5_000, int(env.MEME_GENERATE_WAIT_MS, 150_000)),
+            maxPixels: Math.min(4096, Math.max(440, int(env.MEME_GENERATE_MAX_WIDTH, 1600))),
+        },
+
+        // Each person's share a day of the AI features (server/person-cap.js), on top of each one's daily budget for
+        // everyone; staff are not capped. 0 turns a cap off.
+        perPerson: {
+            analyze: Math.max(0, int(env.MEME_ANALYZE_PER_PERSON_DAY, 20)),
+            research: Math.max(0, int(env.MEME_RESEARCH_PER_PERSON_DAY, 3)),
+            generate: Math.max(0, int(env.MEME_GENERATE_PER_PERSON_DAY, 15)),
         },
 
         // Every citation is re-verified daily, off under MEME_DRILL.

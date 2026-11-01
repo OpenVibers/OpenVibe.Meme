@@ -14,8 +14,8 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
 
 - **Entries, cited.** Every entry has one origin citation and any number of later uses; the quote is verbatim,
   the URL is canonical (OpenVibe.Video's `?t=` redirect is followed, e.g. `/v/6026?t=864` → `/v/6025?t=1541`),
-  and `quote_hash` is its sha256. A summary is AI-written and passes `noLooks`; if it names looks it is replaced by
-  the title. Verbatim quotes are never rewritten.
+  and `quote_hash` is its sha256. A summary is stored as written (L24 has no looks filter); only an empty summary
+  falls back to the title. Verbatim quotes are never rewritten.
 - **Candidates stay hidden.** `server/importer.js` reads public Chat/Live APIs only, finds a 3–6 word phrase used at
   least twice on two different days, attaches citations and inserts the entry `hidden`. It never publishes. A staff
   person (Network role `global_mod` or above) publishes it with `POST /api/v1/entries/:slug/publish`.
@@ -33,21 +33,62 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
 - **The citation is checked again.** A daily job reads every public citation URL; a 404/410 marks it `gone`, a
   401/403 marks it `hidden`, and an entry whose origin is gone is hidden (revision +1, Search tombstone).
 - **Meme of the week.** People vote once per ISO week; a second vote changes the choice, never adds a ballot.
+- **The encyclopedia (M2).** An entry has a `scope` (`openvibe` for today's running jokes, `internet` for the
+  encyclopedia), an origin with a public citation, spread points (date, place, URL, count), named variations,
+  Media examples, meaning and usage, L1 labels (`nudity`, `language`, `graphic`, `18+`, `flashing`, `spoilers`),
+  related memes and a moderated revision history. A signed-in person proposes an entry or an edit; it stays
+  pending, and staff approve or reject it. Every public entry is still one Search Fabric document, now with
+  `scope` and `labels` facets and the origin as provenance.
+- **Trends (M3).** Reddit's official API (OAuth2 client credentials, the four permitted subreddits, no scraping)
+  records a score sample per post; `/api/v1/trends?window=day|week` ranks posts by upvote velocity, lists the
+  templates a repeated perceptual hash reveals, and the public entries used in the same window. The importer is
+  off when `MEME_REDDIT_CLIENT_ID`/`MEME_REDDIT_CLIENT_SECRET` are missing.
+- **Analyse (M4).** `POST /api/v1/analyze { url | media_id }` sends the picture to OpenVibe.AI's vision call and
+  one structured extraction. It returns the template, the matched entries, origin guesses with a confidence,
+  meaning and usage, L1 labels, and for a Reddit URL its spread and the comments' tone. The daily AI budget is
+  enforced before any call.
+- **Deep dives (M5).** `POST /api/v1/research { topic }` starts a job that gathers sources with OpenVibe.AI's
+  `research.gather` and writes a long read in which every paragraph cites a numbered source. A read that cites
+  nothing is failed, not published. `GET /api/v1/research/:id` polls it, and the author may save it as a public
+  deep-dive entry.
 - **The generator.** Pick a template, type 1–4 lines of at most 120 characters each and preview them as HTML text
   over the image; a caption is stored as text lines, never as a rendered image.
+- **The generator (M6).** `POST /api/v1/generate { template_slug | topic, lines? }` researches how the format is
+  used right now, writes captions in that voice, and renders a real PNG server-side with the template's own text
+  boxes, bundled DejaVu fonts, outline and wrap. The PNG goes to OpenVibe.Media and the caption keeps its labels
+  and Media id. The older caption page still previews text in HTML over the template.
 
 ## Owns
 
 | Table | Holds | Migration |
 |---|---|---|
-| `meme_entries` | `mem_` + ULID, unique slug (`/m/<slug>`), title, kind `joke\|catchphrase\|bit\|meme\|saga\|classic`, AI summary, status + `status_since`, first/last seen, visibility `public\|unlisted\|hidden`, `revision` (+1 on every change), timestamps, the picture and its licence, the attribution, the Wikidata id | `migrations/0001_initial.sql`, `0002_judge_and_encyclopedia.sql` |
+| `meme_entries` | `mem_` + ULID, unique slug (`/m/<slug>`), title, kind `joke\|catchphrase\|bit\|meme\|saga\|classic\|format\|event\|person\|phrase\|deep_dive`, scope `openvibe\|internet`, AI summary, meaning/usage, L1 `labels`, status + `status_since`, first/last seen, visibility `public\|unlisted\|hidden`, `submitted_by` for a proposal, `revision` (+1 on every change), timestamps, the picture and its licence, the attribution, the Wikidata id | `migrations/0001_initial.sql`, `0002_judge_and_encyclopedia.sql`, `0003_encyclopedia.sql` |
 | `meme_citations` | entry, role `origin\|use\|example`, source service/type/id, stream/VOD/clip/message ids, canonical VOD `offset_seconds`, verbatim `quote_text`, `quote_hash`, canonical `url`, `observed_at`, `source_status` `live\|hidden\|gone`; the open web is a source too (`wikipedia`, `wikidata`, `commons`) | `0001_initial.sql`, `0002_judge_and_encyclopedia.sql` |
 | `meme_judgements` | one row per entry: the score, the reason, the title/summary/origin/spread/examples the AI wrote, whether the text names looks or carries a denied word, the model and the run | `0002_judge_and_encyclopedia.sql` |
 | `meme_status_events` | every status change: from, to, reason, who, when; a judge decision adds `decision`, `from_visibility`, `to_visibility` and `score` | `0001_initial.sql`, `0002_judge_and_encyclopedia.sql` |
+| `meme_origins` | an internet entry's public origin: source `web\|reddit\|media\|openvibe`, URL, title, publisher, author, published/retrieved time, quote | `0003_encyclopedia.sql` |
+| `meme_spread_points` | entry, date, place, optional URL and count, note — one sighting per (entry, date, place, URL) | `0003_encyclopedia.sql` |
+| `meme_variations` | entry, name, description, optional `med_` Media id, source URL | `0003_encyclopedia.sql` |
+| `meme_examples` | entry, `med_` Media id, caption, source URL — reposted pictures keep their source link | `0003_encyclopedia.sql` |
+| `meme_entry_related` | directed related pairs; the API returns both sides' public entries | `0003_encyclopedia.sql` |
+| `meme_entry_revisions` | entry, revision, author, `change` jsonb, field-by-field `diff`, moderation state `pending\|approved\|rejected`, reviewer and note | `0003_encyclopedia.sql` |
 | `meme_votes` | (`week` `YYYY-Www`, `subject`) → entry; one vote a week | `0001_initial.sql` |
 | `meme_templates` | id, name, `image_url` (openvibe.media, a local data-free placeholder or a Wikimedia Commons file), `box_count`, source, license, credit, source page, attribution; three placeholders seeded | `0001_initial.sql`, `0002_judge_and_encyclopedia.sql` |
 | `meme_captions` | `mcp_` + ULID, subject, template, `lines` jsonb (1–4 plain-text lines), visibility, created | `0001_initial.sql` |
 | `meme_reports` | `mrp_` + ULID, entry, subject, kind `takedown\|correction`, reason, note, status | `0001_initial.sql` |
+| `meme_reddit_posts` | one Reddit post: id `t3_…`, subreddit, title, permalink, source URL, author, score, comments, over-18, dHash, Media id, created/last seen | `0004_trends.sql` |
+| `meme_reddit_samples` | one score observation per post per run; velocity is computed from these, never from one score | `0004_trends.sql` |
+| `meme_reddit_templates` | a dHash cluster repeated across posts: label, representative picture, Media id, post count, first/last seen | `0004_trends.sql` |
+| `meme_reddit_template_posts` | which posts belong to a template and their hash distance | `0004_trends.sql` |
+| `meme_ai_usage` | per UTC day and kind (`analyze`/`research`/`generate`): AI calls reserved and the cost the run stated | `0005_analyze.sql` |
+| `meme_analyses` | `anl_` + ULID, subject (or null for a public analysis), input URL/Media id, status, the finished result jsonb and its cost | `0005_analyze.sql` |
+| `meme_research` | `rsc_` + ULID, subject, topic, status, title/summary, the Markdown read, numbered sources/facts/citations, cost, error, saved entry slug, times | `0006_research.sql` |
+| `meme_deep_dives` | entry, research job, the full Markdown read and its numbered sources/citations | `0006_research.sql` |
+| `meme_research_usage` | per UTC day: research calls reserved and the cost the runs stated | `0006_research.sql` |
+| `meme_templates` | id, name, `image_url` (openvibe.media or a local data-free placeholder), `box_count`, source, license, `layout` jsonb (text boxes, font, size, colour, outline, align, wrap); three placeholders seeded | `0001_initial.sql`, `0007_generate.sql` |
+| `meme_captions` | `mcp_` + ULID, subject, template, `lines` jsonb (1–4 plain-text lines), visibility, created, L1 `labels`, rendered `media_id` | `0001_initial.sql`, `0007_generate.sql` |
+| `meme_reports` | `mrp_` + ULID, entry, subject, kind `takedown\|correction`, reason, note, status | `0001_initial.sql` |
+| `meme_generate_usage` | per UTC day: generation calls reserved and the cost the runs stated | `0007_generate.sql` |
 | `meme_outbox` | Today's outbox shape: fixed `evt_` id, topic, JSON payload, attempts, last error, claim/backoff lease — the Search document queue | `0001_initial.sql` |
 | `account_data_events` | openvibe-sdk/account-data's export/deletion receipts | `0001_initial.sql` |
 | `telemetry_samples` | aggregated request telemetry, pruned after 14 days | `0001_initial.sql` |
@@ -98,13 +139,24 @@ also gets per-actor minute/hour limits (`MEME_LIMITS_MINUTE`, `MEME_LIMITS_HOUR`
 
 | Route | What it does |
 |---|---|
-| `GET /entries?limit=&cursor=&kind=&status=` | public entries, newest first; opaque keyset cursor; `Cache-Control: public, max-age=60` |
-| `GET /entries/:slug` | one entry with `origin`, every `citation`, the use `timeline` and `examples`, and the judge's `notes` (where it started, how people use it, the examples); a hidden one is 404 unless staff |
+| `GET /entries?scope=&q=&status=&label=&kind=&sort=&window=&channel=&limit=&cursor=` | public entries; `scope=openvibe\|internet`; `q` matches title/summary/meaning/usage/slug; `label` is one L1 label; `sort=top&window=day\|week\|month` ranks by live uses (a cursor only on `newest`); `channel=<stream_id>` is Live's per-channel Memes block; `Cache-Control: public, max-age=60` |
+| `GET /entries/:slug` | one entry with `origin` (a citation, or the web origin), `web_origin`, citations, `timeline`, `examples`, `spread`, `variations`, `related` and approved `revisions`, and the judge's `notes` (where it started, how people use it, the examples); a hidden proposal is 404 unless its author or staff |
+| `GET /entries/:slug/revisions` | the approved revision history; staff also see pending and rejected ones |
 | `GET /entries/:slug/series?days=30` | uses per UTC day, zero-filled, 1–365 days |
+| `POST /entries` | signed in, same-origin: a proposal (`title`, `kind`, `scope`, `summary`, `meaning`, `usage`, `labels`, `origin`, `spread`, `variations`, `examples`, `related`) — born hidden with revision 1 pending (202); staff proposals are approved and public (201) |
+| `POST /entries/:slug/revisions` | signed in: a proposed edit, stored as a revision with a field-by-field `diff`; a person's waits for review (202), staff's applies at once (201) |
+| `POST /entries/:slug/revisions/:revision/review` | staff: `{ state: "approved"\|"rejected", note? }`; approving copies the change onto the entry, bumps its revision and re-indexes it |
+| `GET /moderation/revisions?limit=` | staff: the pending revision queue with each entry's slug and title |
 | `GET /trending?limit=` | public entries, `rising` first, then `peaked`, `classic`, `dead`; last use newest first |
+| `GET /trends?window=day\|week&limit=` | rising Reddit posts with upvote velocity (from score samples), new template clusters and the public entries used in the window; `Cache-Control: public, max-age=120` |
+| `POST /research` | signed in; `{ topic }` starts a deep-dive job (202 + `Location`); 503 without AI, 429 `meme.ai_budget`, 400 for a topic outside 2–300 characters |
+| `GET /research/:id` | the job: queued/running/failed is visible to its author and staff; succeeded is public. Carries the source pack, facts, citations and the Markdown read |
+| `POST /research/:id/entry` | the author or staff save a succeeded read as a public deep-dive entry (201, 200 when already saved) |
+| `GET /entries/:slug/deep-dive` | the saved deep dive's full Markdown, numbered sources and citations |
 | `GET /week` | this ISO week's candidates (public entries with a live use that week) and their vote counts |
 | `POST /week/vote` | signed in, same-origin; `{ entry_id }`; upsert per (`week`, subject) — one vote a week |
-| `GET /templates` | the caption templates with their caption counts |
+| `GET /templates` | the caption templates with their caption counts and `layout` |
+| `POST /generate` | signed in; `{ template_slug \| topic, lines? }`; researches current uses, writes captions, renders the template's layout as a PNG, stores it in Media and saves the caption. 201 returns `media_id`, `media_url`, `captions`, `template`, `labels`, `caption`; 503 `meme.ai_unavailable`/`meme.media_unavailable`; 429 `meme.ai_budget` |
 | `POST /captions` | signed in; `{ template_id, lines, visibility? }`, 1–4 lines × 120 chars, blocked words refused |
 | `GET /captions/:id` | one caption; a public read never returns the author's subject |
 | `POST /entries/:slug/report` | signed in; `{ kind: "takedown"\|"correction", reason, note? }`, stored for staff |
@@ -113,10 +165,11 @@ also gets per-actor minute/hour limits (`MEME_LIMITS_MINUTE`, `MEME_LIMITS_HOUR`
 | `GET /staff/candidates/:slug` | staff: one candidate — its judgement, its citations and its decision history |
 | `POST /entries/:slug/publish` | staff: hidden → public; `409 meme.origin_gone` when the origin is not live |
 | `POST /entries/:slug/hide` | staff: public → hidden; Search tombstone |
-| `PATCH /entries/:slug` | staff: `{ title, kind, status, reason? }`; a status change writes `meme_status_events` |
+| `PATCH /entries/:slug` | staff: `{ title, kind, status, reason? }`; a status change writes `meme_status_events` and the edit is kept as an approved revision |
 
 Validation refusals are `400 { code: "meme.invalid", message }`; a blocked caption is
-`400 { code: "meme.blocked_words" }`. Other codes: `meme.sign_in_required`, `meme.staff_required`,
+`400 { code: "meme.blocked_words" }`; an edit that changes nothing is `409 meme.no_change` and a revision
+already reviewed is `409 meme.revision_reviewed`. Other codes: `meme.sign_in_required`, `meme.staff_required`,
 `meme.cross_site`, `meme.not_found`, `meme.template_not_found`, `meme.origin_gone`, `meme.rate_limited`.
 
 ## The judge
@@ -159,6 +212,60 @@ or whose text names looks or carries a denied word, stays hidden for staff with 
 
 Nothing is scraped from a site whose terms forbid it: Wikipedia, Wikidata and Wikimedia Commons only, each with
 its User-Agent, paced per host.
+
+## Trends (M3)
+
+`server/reddit.js` reads `oauth.reddit.com` with this app's own OAuth2 client-credentials token and a User-Agent
+that names it. The official API is the only Reddit path: no page, login or captcha wall is touched. Each run
+reads `/r/<sub>/top?t=day` for the subreddits in `MEME_REDDIT_SUBREDDITS` (default r/memes, r/dankmemes,
+r/MemeEconomy and r/wholesomememes), upserts the posts, appends a score sample, and dHashes the picture with
+`sharp` (9×8 grayscale, 64-bit). Equal-enough hashes are grouped; a group of at least
+`MEME_REDDIT_MIN_TEMPLATE_POSTS` distinct posts becomes a `meme_reddit_templates` row, and the picture is
+uploaded to OpenVibe.Media when `OV_MEDIA_INTERNAL_URL` and the Network client secret are set. Without the Reddit
+credentials the importer is off, and the read still serves whatever was recorded before.
+
+`server/source-registration.js` creates the registry row in OpenVibe.Sources (`meme-reddit`, disabled, with its
+terms and robots notes) once when `MEME_SOURCES_REGISTER=1` and `OV_SOURCES_INTERNAL_URL` are set; it never
+overwrites an existing row. The row documents where the data comes from; Meme's importer owns the OAuth exchange.
+## Analyse (M4)
+
+`POST /api/v1/analyze` accepts exactly one of `url` (a public http(s) URL) or `media_id` (a `med_…` object). For a
+Reddit URL it reads the post and its top comments through the official API (`server/reddit-read.js`); any other URL
+is treated as the picture, and a Media id is resolved to `https://openvibe.media/o/<id>`.
+
+It then makes two OpenVibe.AI runs: `pics.describe_image` (vision: alt, caption, tags) and `ai.extract` (one
+structured answer: template, meaning, usage, labels, origin guesses with confidence, similar formats, comment
+tone). Meme matches the answer against its own templates and public entries and never lets the model write an
+entry. `MEME_AI_DAILY_CALLS` (200) and `MEME_AI_DAILY_BUDGET_USD` (5) cap the day; the calls are reserved before
+the first run and the run's stated cost is recorded in `meme_ai_usage`. Reddit credentials are the same
+`MEME_REDDIT_CLIENT_ID`/`MEME_REDDIT_CLIENT_SECRET` as the trends importer.
+## Deep dives (M5)
+
+`POST /api/v1/research` requires a signed-in person and a topic. The job runs `research.gather` (Wikipedia, the
+topic's Fandom wiki, Wikidata, DeepSeek search, Commons/Openverse, as OpenVibe.AI implements it) and then
+`ai.generate` with the numbered evidence pack. The prompt requires a 700–1400 word Markdown read whose every
+paragraph ends with its source numbers. `groundedIssues()` checks that every body paragraph of at least ten words
+has a `[n]` and that every `n` names a gathered source; a read that fails is stored `failed` with
+`meme.research_ungrounded`, never published. The read is public once succeeded. Saving it creates a public entry
+and `meme_deep_dives` keeps its full text for `GET /entries/:slug/deep-dive`.
+
+Two calls per job are reserved against `MEME_RESEARCH_DAILY_CALLS` (40) and `MEME_RESEARCH_DAILY_BUDGET_USD` (5);
+the calls and the runs' stated cost go in `meme_research_usage`. The job is in-process: a restart loses a queued
+job (it stays `running` for the operator to see; there is no retry button yet).
+## The generator (M6)
+
+`POST /api/v1/generate` takes a template (`template_slug`, which is the id, slug or name) or a topic. It first runs
+`research.gather` on how the format is actually captioned right now, then `ai.extract` for the lines and the L1
+labels; with `lines` supplied the person's lines are used verbatim and only the labels come from the model. When a
+topic alone is given, the model picks one of the configured templates.
+
+`server/render-png.js` loads the template's `layout` (or a vertical fallback for a template without one), wraps
+each line to its box, shrinks the font until it fits, converts the text to outlines with opentype.js (bundled
+DejaVu Sans and DejaVu Sans Bold under `server/assets/fonts`, Bitstream Vera licence included), strokes the
+outline and fills the text, then composites the SVG over the template artwork with sharp. The PNG is uploaded to
+OpenVibe.Media as a public object; without Media the route answers 503 rather than returning an unstored picture.
+The saved caption carries the labels and the `med_…` id. Two calls per request are reserved against
+`MEME_GENERATE_DAILY_CALLS` (60) and `MEME_GENERATE_DAILY_BUDGET_USD` (5) in `meme_generate_usage`.
 
 ## The importer
 
@@ -230,7 +337,7 @@ the public pages and every public entry.
 - origin: Chat message **86957** (2026-10-28 00:11:53, “your Cozmo ain’t online yet”);
 - use: VOD **6025** at **1541 s** — the canonical target of `/v/6026?t=864` (source part 6026 at 864.08 s), quote
   “but yeah and Cosmo is broken now…”;
-- summary AI-written and `noLooks`-cleaned; `first_seen_at`/`last_seen_at` from the two citations.
+- summary AI-written and stored as written (no looks filter); `first_seen_at`/`last_seen_at` from the two citations.
 
 It never publishes. A re-run leaves the existing entry and adds only a citation that is not already there. VOD
 5709 and clip 483 are refused before anything is written.
@@ -250,8 +357,8 @@ node scripts/seed-templates.js # the caption templates, from Wikimedia Commons
 ```
 
 The tests boot the app with a mock Network, an OpenVibe.AI stand-in, a Chat/Live/Video fixture server, and a
-temporary database: the migration, the importer's candidate and its canonical redirect, the deny list, `noLooks`,
-the one-vote-a-week rule, the caption limits, staff publish/patch/hide, the Search document (validated against
+temporary database: the migration, the importer's candidate and its canonical redirect, the deny list, L24 text
+(no looks filter), the one-vote-a-week rule, the caption limits, staff publish/patch/hide, the Search document (validated against
 `search.index-document@1`), the citation 404 → gone → hidden path, sign-in, the pages and cache headers, and the
 account export/deletion over votes, captions and reports. The judge, the publish rule, the encyclopedia's
 attribution and the templates' licences have their own files: `test/judge.test.js`, `test/encyclopedia.test.js`
