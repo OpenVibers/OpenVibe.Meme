@@ -163,6 +163,14 @@ function load(env = process.env) {
             maxPixels: Math.min(4096, Math.max(440, int(env.MEME_GENERATE_MAX_WIDTH, 1600))),
         },
 
+        // Each person's share a day of the AI features (server/person-cap.js), on top of each one's daily budget for
+        // everyone; staff are not capped. 0 turns a cap off.
+        perPerson: {
+            analyze: Math.max(0, int(env.MEME_ANALYZE_PER_PERSON_DAY, 20)),
+            research: Math.max(0, int(env.MEME_RESEARCH_PER_PERSON_DAY, 3)),
+            generate: Math.max(0, int(env.MEME_GENERATE_PER_PERSON_DAY, 15)),
+        },
+
         // Every citation is re-verified daily, off under MEME_DRILL.
         reverify: { intervalMs: Math.max(60_000, int(env.MEME_REVERIFY_INTERVAL_MS, 24 * 60 * 60_000)) },
 

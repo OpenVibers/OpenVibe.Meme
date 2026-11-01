@@ -14,6 +14,7 @@ const { createAccountData, TOPICS } = require('openvibe-sdk/account-data');
 const TABLES = [
     { table: 'meme_analyses', subject: 'subject', value: (usr) => usr, file: 'analyses.json', erase: 'delete' },
     { table: 'meme_research', subject: 'subject', value: (usr) => usr, file: 'research.json', erase: 'delete' },
+    { table: 'meme_person_usage', subject: 'subject', value: (usr) => usr, file: 'ai-usage.json', erase: 'delete' },
     { table: 'meme_votes', subject: 'subject', value: (usr) => usr, file: 'votes.json', erase: 'delete' },
     { table: 'meme_captions', subject: 'subject', value: (usr) => usr, file: 'captions.json', erase: 'delete' },
     { table: 'meme_reports', subject: 'subject', value: (usr) => usr, file: 'reports.json', erase: 'delete' },

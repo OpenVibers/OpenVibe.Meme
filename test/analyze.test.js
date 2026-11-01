@@ -80,6 +80,7 @@ const EXTRACT = {
     };
     const t = await boot({ env: baseEnv, redditRead: { tokenUrl: `${reddit.url}/api/v1/access_token`, apiBase: reddit.url } });
     const mediaId = `med_${ids.ulid()}`;
+    const ana = t.network.addUser('ana');   // analysing is for a person: it spends OpenVibe.AI calls
     try {
         const now = new Date().toISOString();
         await t.ctx.entries.createCandidate({
@@ -88,7 +89,7 @@ const EXTRACT = {
         });
 
         await check('an image URL returns the template, matched entries, origins, meaning, labels and vision', async () => {
-            const r = await t.get('/api/v1/analyze', { json: { url: 'https://example.com/picture.png' } });
+            const r = await t.get('/api/v1/analyze', { as: ana, json: { url: 'https://example.com/picture.png' } });
             assert.strictEqual(r.status, 200, r.text);
             const a = r.json();
             assert.strictEqual(a.template.name, 'Classic two-line');
@@ -118,7 +119,7 @@ const EXTRACT = {
 
         await check('a Reddit URL adds the spread and the comments tone', async () => {
             aiState.requests.length = 0;
-            const r = await t.get('/api/v1/analyze', { json: { url: 'https://www.reddit.com/r/memes/comments/abc123/classic/' } });
+            const r = await t.get('/api/v1/analyze', { as: ana, json: { url: 'https://www.reddit.com/r/memes/comments/abc123/classic/' } });
             assert.strictEqual(r.status, 200, r.text);
             const a = r.json();
             assert.strictEqual(a.reddit.spread.score, 4200);
@@ -132,28 +133,34 @@ const EXTRACT = {
 
         await check('a Media object id is accepted and analysed by its Media URL', async () => {
             aiState.requests.length = 0;
-            const r = await t.get('/api/v1/analyze', { json: { media_id: mediaId } });
+            const r = await t.get('/api/v1/analyze', { as: ana, json: { media_id: mediaId } });
             assert.strictEqual(r.status, 200, r.text);
             assert.strictEqual(r.json().input.media_id, mediaId);
             assert.ok(aiState.requests[0].input.image.url.endsWith(`/o/${mediaId}`));
         });
 
         await check('validation refuses both/neither/bad ids and a missing Reddit credential', async () => {
-            assert.strictEqual((await t.get('/api/v1/analyze', { json: {} })).status, 400);
-            assert.strictEqual((await t.get('/api/v1/analyze', { json: { url: 'https://example.com/a.png', media_id: mediaId } })).status, 400);
-            assert.strictEqual((await t.get('/api/v1/analyze', { json: { url: 'ftp://example.com/a.png' } })).status, 400);
-            assert.strictEqual((await t.get('/api/v1/analyze', { json: { media_id: 'nope' } })).status, 400);
+            assert.strictEqual((await t.get('/api/v1/analyze', { as: ana, json: {} })).status, 400);
+            assert.strictEqual((await t.get('/api/v1/analyze', { as: ana, json: { url: 'https://example.com/a.png', media_id: mediaId } })).status, 400);
+            assert.strictEqual((await t.get('/api/v1/analyze', { as: ana, json: { url: 'ftp://example.com/a.png' } })).status, 400);
+            assert.strictEqual((await t.get('/api/v1/analyze', { as: ana, json: { media_id: 'nope' } })).status, 400);
             const t2 = await boot({ env: { ...baseEnv, MEME_REDDIT_CLIENT_ID: null, MEME_REDDIT_CLIENT_SECRET: null }, redditRead: { tokenUrl: `${reddit.url}/api/v1/access_token`, apiBase: reddit.url } });
             try {
-                const no = await t2.get('/api/v1/analyze', { json: { url: 'https://www.reddit.com/r/memes/comments/abc123/classic/' } });
+                const no = await t2.get('/api/v1/analyze', { as: t2.network.addUser('ann'), json: { url: 'https://www.reddit.com/r/memes/comments/abc123/classic/' } });
                 assert.strictEqual(no.status, 503, no.text);
                 assert.strictEqual(no.json().code, 'meme.reddit_unavailable');
             } finally { await t2.close(); }
         });
 
+        await check('signed out, or as an app, nobody analyses (it spends the day\'s AI budget)', async () => {
+            const r = await t.get('/api/v1/analyze', { json: { url: 'https://example.com/a.png' } });
+            assert.strictEqual(r.status, 401, r.text);
+            assert.strictEqual(r.json().code, 'meme.sign_in_required');
+        });
+
         await check('a failed AI run is a 502, not a made-up answer', async () => {
             aiState.fail = true;
-            const r = await t.get('/api/v1/analyze', { json: { url: 'https://example.com/fail.png' } });
+            const r = await t.get('/api/v1/analyze', { as: ana, json: { url: 'https://example.com/fail.png' } });
             assert.strictEqual(r.status, 502, r.text);
             assert.strictEqual(r.json().code, 'meme.ai_failed');
             aiState.fail = null;
@@ -166,19 +173,37 @@ const EXTRACT = {
         const t2 = await boot({ env: { OV_AI_INTERNAL_URL: null } });
         try {
             assert.strictEqual(t2.ctx.ai.enabled, false);
-            const r = await t2.get('/api/v1/analyze', { json: { url: 'https://example.com/a.png' } });
+            const r = await t2.get('/api/v1/analyze', { as: t2.network.addUser('ann'), json: { url: 'https://example.com/a.png' } });
             assert.strictEqual(r.status, 503, r.text);
             assert.strictEqual(r.json().code, 'meme.ai_unavailable');
+        } finally { await t2.close(); }
+    });
+
+    await check('each person has a share a day: past it, 429 before any AI call, and someone else still can', async () => {
+        const t2 = await boot({ env: { ...baseEnv, MEME_ANALYZE_PER_PERSON_DAY: '1' }, redditRead: { tokenUrl: `${reddit.url}/api/v1/access_token`, apiBase: reddit.url } });
+        try {
+            const pat = t2.network.addUser('pat');
+            const bad = await t2.get('/api/v1/analyze', { as: pat, json: {} });
+            assert.strictEqual(bad.status, 400, 'a refused try is free');
+            const first = await t2.get('/api/v1/analyze', { as: pat, json: { url: 'https://example.com/a.png' } });
+            assert.strictEqual(first.status, 200, first.text);
+            const before = aiState.requests.length;
+            const second = await t2.get('/api/v1/analyze', { as: pat, json: { url: 'https://example.com/b.png' } });
+            assert.strictEqual(second.status, 429, second.text);
+            assert.strictEqual(second.json().code, 'meme.person_cap');
+            assert.strictEqual(aiState.requests.length, before, 'no call was made');
+            const other = await t2.get('/api/v1/analyze', { as: t2.network.addUser('lee'), json: { url: 'https://example.com/c.png' } });
+            assert.strictEqual(other.status, 200, other.text);
         } finally { await t2.close(); }
     });
 
     await check('the daily call budget refuses the request before any AI call', async () => {
         const t2 = await boot({ env: { ...baseEnv, MEME_AI_DAILY_CALLS: '2' }, redditRead: { tokenUrl: `${reddit.url}/api/v1/access_token`, apiBase: reddit.url } });
         try {
-            const first = await t2.get('/api/v1/analyze', { json: { url: 'https://example.com/a.png' } });
+            const first = await t2.get('/api/v1/analyze', { as: t2.network.addUser('ann'), json: { url: 'https://example.com/a.png' } });
             assert.strictEqual(first.status, 200, first.text);
             const before = aiState.requests.length;
-            const second = await t2.get('/api/v1/analyze', { json: { url: 'https://example.com/b.png' } });
+            const second = await t2.get('/api/v1/analyze', { as: t2.network.addUser('ann'), json: { url: 'https://example.com/b.png' } });
             assert.strictEqual(second.status, 429, second.text);
             assert.strictEqual(second.json().code, 'meme.ai_budget');
             assert.strictEqual(aiState.requests.length, before, 'no call was made');

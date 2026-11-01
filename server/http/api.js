@@ -33,6 +33,8 @@ const { KINDS, STATUSES, SCOPES, LABELS } = require('../store');
 function createApi(ctx) {
     const { config, s, principal, entries, trends, analyzer, research, generator } = ctx;
     const r = asyncRouter();
+    // Each person's daily share of the AI features (analyze, research, generate), on top of each one's budget for all.
+    const personCap = require('../person-cap').createPersonCap({ config, s });
 
     r.use(express.json({ limit: '64kb' }));
     r.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
@@ -216,14 +218,19 @@ function createApi(ctx) {
     // ── Analyse ─────────────────────────────────────────────
     // POST /analyze { url | media_id } — the vision call, the structured extraction, the matched entries/template,
     // origin guesses with confidence, meaning/usage, L1 labels, and a Reddit URL's spread and comments tone.
-    r.post('/analyze', async (req, res) => {
+    // A person only: every analysis spends OpenVibe.AI calls, so a signed-out caller could spend the day's budget.
+    r.post('/analyze', requirePerson, async (req, res) => {
         const b = req.body && typeof req.body === 'object' ? req.body : {};
+        const who = { subject: req.principal.subject, kind: 'analyze', staff: isStaff(req.principal) };
+        const share = await personCap.check(who);
+        if (!share.ok) return problem(res, share.status, share.code, share.message);
         const out = await analyzer.analyze({
             url: typeof b.url === 'string' ? b.url : null,
             mediaId: typeof b.media_id === 'string' ? b.media_id : null,
-            subject: req.principal && req.principal.kind === 'user' ? req.principal.subject : null,
+            subject: req.principal.subject,
         });
         if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'that meme could not be analysed');
+        await personCap.add(who);
         res.set('Cache-Control', 'private, no-store');
         return res.json(out.analysis);
     });
@@ -232,8 +239,12 @@ function createApi(ctx) {
     // POST /research { topic } — start the job; 202 with the id, then GET /research/:id until succeeded or failed.
     r.post('/research', requirePerson, async (req, res) => {
         const b = req.body && typeof req.body === 'object' ? req.body : {};
+        const who = { subject: req.principal.subject, kind: 'research', staff: isStaff(req.principal) };
+        const share = await personCap.check(who);
+        if (!share.ok) return problem(res, share.status, share.code, share.message);
         const out = await research.create({ topic: b.topic, subject: req.principal.subject });
         if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'invalid research');
+        await personCap.add(who);
         res.set('Location', `/api/v1/research/${out.research.id}`);
         return res.status(202).json(out.research);
     });
@@ -275,6 +286,9 @@ function createApi(ctx) {
     // template's own PNG with bundled fonts, store it in Media and save the caption with its labels.
     r.post('/generate', requirePerson, async (req, res) => {
         const b = req.body && typeof req.body === 'object' ? req.body : {};
+        const who = { subject: req.principal.subject, kind: 'generate', staff: isStaff(req.principal) };
+        const share = await personCap.check(who);
+        if (!share.ok) return problem(res, share.status, share.code, share.message);
         const out = await generator.generate({
             templateSlug: typeof b.template_slug === 'string' ? b.template_slug : null,
             topic: typeof b.topic === 'string' ? b.topic : null,
@@ -282,6 +296,7 @@ function createApi(ctx) {
             subject: req.principal.subject,
         });
         if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'the meme could not be generated');
+        await personCap.add(who);
         res.set('Location', `/api/v1/captions/${out.caption.id}`);
         return res.status(201).json({ media_id: out.media_id, media_url: out.media_url, captions: out.captions, template: out.template, labels: out.labels, caption: out.caption, cost_usd: out.cost_usd });
     });
