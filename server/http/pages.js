@@ -56,6 +56,19 @@ function createPageRoutes(ctx) {
     });
 
     // ── One entry ────────────────────────────────────────────
+    /** A search result and share-card line: the entry's own summary or first use, cut at a word to 155 characters. */
+    function metaDescription(e, citations = []) {
+        const origin = citations.find((c) => c.role === 'origin') || citations[0] || null;
+        const own = [e.summary, origin && origin.quote_text]
+            .map((v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : ''))
+            .find((v) => v.length >= 40);
+        if (!own) return `${e.title}: where the joke started, how it spread, and every use on OpenVibe.`;
+        if (own.length <= 155) return own;
+        const cut = own.slice(0, 154);
+        const at = cut.lastIndexOf(' ');
+        return `${(at > 40 ? cut.slice(0, at) : cut).replace(/[\s,;:.!?-]+$/, '')}…`;
+    }
+
     async function entryPage(req, res, { problem = null } = {}) {
         const slug = String(req.params.slug || '');
         const row = await entries.bySlug(slug);
@@ -63,17 +76,18 @@ function createPageRoutes(ctx) {
         if (!row || (row.visibility === 'hidden' && !staff)) return notFound(req, res);
         const citations = await entries.citations(row.id);
         const e = entries.wireEntry(row);
+        const description = metaDescription(e, citations);
         const jsonLd = seo.jsonLd.webPage({
             name: e.title,
             url: `${base()}/m/${e.slug}`,
-            description: (e.summary || `${e.title} on OpenVibe.Meme`).slice(0, 160),
+            description,
             siteUrl: base(),
         });
         return page(req, res, {
             index: e.visibility === 'public',
             cache: e.visibility === 'public' ? PUBLIC_CACHE : null,
             title: e.title,
-            description: (e.summary || `${e.title} on OpenVibe.Meme`).slice(0, 160),
+            description,
             jsonLd: [jsonLd],
             body: raw(views.entry({ e, citations, signedIn: Boolean(signedIn(req)), staff, reported: req.query.reported === '1', problem })),
         });
