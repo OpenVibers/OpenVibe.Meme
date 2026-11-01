@@ -158,17 +158,18 @@ const answer = (score, extra = {}) => (prompt) => JSON.stringify({
         } finally { await t2.close(); }
     });
 
-    await check('the rule: text that names looks never reaches the public', async () => {
+    // The owner, 2026-10-31: AI text may describe people (openvibe-sdk 0.78.0 turns the looks filter off).
+    await check('text that describes a person is published like any other', async () => {
         const t2 = await boot({ ai: { answer: answer(0.99, { title: 'Cozmo in his blue shirt', summary: 'A man in a kitchen says the robot is offline.' }) } });
         try {
             const entry = await candidate(t2, { slug: 'looks-one', title: 'Looks one', uses: [at(0), at(2), at(3)] });
             const out = await t2.ctx.judgeJob.runOnce({ force: true });
-            if (out.published !== 0) throw new Error('an entry whose text names looks was published');
+            if (out.published !== 1) throw new Error('an entry that describes a person was held back');
             const after = await t2.ctx.entries.byId(entry.id);
-            if (after.visibility !== 'hidden') throw new Error('the entry is not hidden');
-            if (after.title === 'Cozmo in his blue shirt') throw new Error('the title that named looks was used');
+            if (after.visibility !== 'public') throw new Error('the entry is not public');
+            if (after.title !== 'Cozmo in his blue shirt') throw new Error('the AI title was not used');
             const verdict = await t2.ctx.entries.judgement(entry.id);
-            if (!verdict.looks) throw new Error('the judgement does not say the text named looks');
+            if (verdict.looks) throw new Error('the judgement still flags looks');
         } finally { await t2.close(); }
     });
 
