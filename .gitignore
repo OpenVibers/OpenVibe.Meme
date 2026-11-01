@@ -9,3 +9,5 @@ dist/
 *.pem
 *.key
 !server/data/
+__pycache__/
+*.pyc
