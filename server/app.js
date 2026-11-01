@@ -99,9 +99,9 @@ async function createApp(opts = {}) {
 
     const ctx = {
         config, s, keys, sso, principal, search, entries, upstreams, importer, reverifier, accountData, accountSend, log,
-        ai, context, judge, judgeJob,
+        ai: aiRunner, judgeAi: ai, context, judge, judgeJob,
         media, trends, reddit, sourceRegistration,
-        aiRunner, redditReader, analyzer,
+        redditReader, analyzer,
     };
 
     const app = express();
