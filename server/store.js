@@ -173,6 +173,7 @@ function wireTemplate(row) {
         ...(row.credit ? { credit: row.credit } : {}),
         ...(row.source_url ? { source_url: row.source_url } : {}),
         ...(row.attribution ? { attribution: row.attribution } : {}),
+        ...(row.layout ? { layout: row.layout } : {}),
     };
 }
 
