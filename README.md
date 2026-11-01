@@ -127,7 +127,7 @@ Environment variable names are in [.env.example](.env.example); no value is comm
 - **PostgreSQL** — `DATABASE_URL` (through PgBouncer) and `DATABASE_DIRECT_URL` (migrations); embedded PGlite in
   `MEME_PGLITE_DIR` for development.
 - **Valkey** — optional `VALKEY_URL`, `VALKEY_PREFIX` (readiness lists it; the limits in v1 count in-process).
-- **Packages** — `openvibe-contracts` v0.229.0, `openvibe-sdk` v0.74.0, `openvibe-shared` v4.80.0, the same
+- **Packages** — `openvibe-contracts` v0.229.0, `openvibe-sdk` v0.74.0, `openvibe-shared` v4.81.0, the same
   tags OpenVibe.Today pins.
 
 ## API
@@ -377,5 +377,5 @@ AGPL-3.0-only. See [LICENSE](LICENSE).
 <!-- versions:start -->
 - openvibe-contracts: v0.234.0
 - openvibe-sdk: v0.78.0
-- openvibe-shared: v4.80.0
+- openvibe-shared: v4.81.0
 <!-- versions:end -->
