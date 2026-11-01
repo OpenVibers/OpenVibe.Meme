@@ -10,11 +10,11 @@
   "domain": "openvibe.meme",
   "contracts": "openvibe-contracts v0.234.0",
   "sdk": "openvibe-sdk v0.78.0",
-  "shared": "openvibe-shared v4.81.0",
+  "shared": "openvibe-shared v4.82.0",
   "packages": [
     "openvibe-contracts v0.234.0",
     "openvibe-sdk v0.78.0",
-    "openvibe-shared v4.81.0"
+    "openvibe-shared v4.82.0"
   ],
   "summary": "OpenVibe.Meme is the open meme encyclopedia, rebuilt with AI. Internet entries carry an origin citation, spread points, variations, Media examples, meaning, L1 labels, related memes and a moderated revision history; OpenVibe's own running jokes keep the original importer. The importer reads only public Chat and Live APIs and proposes a candidate when a recurring phrase appears in at least two uses on two different days; the candidate is born hidden with a verbatim citation for every use and stays hidden until a staff person publishes it. Every citation is re-verified daily, a 404 marks it gone and an entry whose origin is gone is hidden. People vote once a week for meme of the week, and a caption is plain text over a template, never a rendered image. Trends come from Reddit's official API (no scraping), measured by score samples and perceptual hashes. Every public entry is one Search Fabric document queued in the service's outbox. Deep dives gather sources and fail unless every claim is cited. The generator renders real PNGs from the template's own layout and stores them in Media.",
   "works": [
