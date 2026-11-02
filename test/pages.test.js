@@ -26,6 +26,11 @@ function jsonLd(html) {
             { role: 'use', source_service: 'live', source_type: 'vod', source_id: '9002', vod_id: 9002, offset_seconds: 120, quote_text: 'the robot is offline for good', url: `${t.upstreams.url}/v/9002?t=120`, observed_at: now },
         ],
     });
+    const describedEntry = await t.ctx.entries.createCandidate({
+        slug: 'cat-typing', title: 'Cat typing', kind: 'meme', status: 'rising',
+        summary: 'A cat at a keyboard, typed as though the cat is answering a work email one slow paw at a time.',
+        first_seen_at: now, last_seen_at: now, visibility: 'public', citations: [],
+    });
     const hiddenEntry = await t.ctx.entries.createCandidate({
         slug: 'not-yet', title: 'Not yet', kind: 'joke', summary: 'Hidden.', status: 'rising',
         first_seen_at: now, last_seen_at: now, visibility: 'hidden',
@@ -63,6 +68,13 @@ function jsonLd(html) {
             assert.ok(r.text.includes('the robot is offline again'));
             assert.ok(r.text.includes('the robot is offline for good'));
             assert.ok(r.text.includes('/v/9002?t=120'));
+        });
+
+        await check('one entry page describes itself for search and share cards', async () => {
+            const fallback = await t.get('/m/robot-is-offline');
+            assert.ok(fallback.text.includes('<meta name="description" content="Robot is offline: where the joke started, how it spread, and every use on OpenVibe.">'), 'the fallback line');
+            const own = await t.get('/m/cat-typing');
+            assert.ok(own.text.includes('<meta name="description" content="A cat at a keyboard, typed as though the cat is answering a work email one slow paw at a time.">'), 'the entry\'s own summary');
         });
 
         await check('a hidden entry is 404 to the public and visible to staff', async () => {

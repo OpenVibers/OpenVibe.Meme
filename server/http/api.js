@@ -14,6 +14,8 @@
  *   GET    /captions/:id                          one saved caption
  *   POST   /entries/:slug/report                  a takedown/correction report (signed in)
  *   GET    /reports                               open reports (staff)
+ *   GET    /staff/candidates                      the hidden candidates with the judge's score (staff)
+ *   GET    /staff/candidates/:slug                one candidate: its judgement, citations and decisions (staff)
  *   POST   /entries/:slug/publish|hide            staff
  *   PATCH  /entries/:slug                         staff: title, kind, status
  *
@@ -26,11 +28,13 @@ const { asyncRouter } = require('./router');
 const { sameOrigin } = require('./principal');
 const { isStaff } = require('../identity/staff');
 const { currentWeek } = require('../week');
-const { KINDS, STATUSES } = require('../store');
+const { KINDS, STATUSES, SCOPES, LABELS } = require('../store');
 
 function createApi(ctx) {
-    const { config, s, principal, entries } = ctx;
+    const { config, s, principal, entries, trends, analyzer, research, generator } = ctx;
     const r = asyncRouter();
+    // Each person's daily share of the AI features (analyze, research, generate), on top of each one's budget for all.
+    const personCap = require('../person-cap').createPersonCap({ config, s });
 
     r.use(express.json({ limit: '64kb' }));
     r.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
@@ -85,6 +89,9 @@ function createApi(ctx) {
     r.get('/ping', (_req, res) => res.json({ ok: true, service: config.service }));
 
     // ── Public reads ────────────────────────────────────────
+    // GET /entries?scope=&q=&status=&label=&kind=&sort=newest|top&window=day|week|month|all&channel=
+    // `scope=openvibe` is Live's "Memes" page: `sort=top&window=week&channel=<stream_id>` gives the top this week,
+    // `sort=newest` the newest; `label` and `q` search the encyclopedia.
     r.get('/entries', async (req, res) => {
         const limit = req.query.limit == null || req.query.limit === '' ? 20 : Number.parseInt(req.query.limit, 10);
         if (!Number.isFinite(limit) || limit < 1) return invalid(res, 'limit must be from 1 to 50');
@@ -92,13 +99,29 @@ function createApi(ctx) {
         if (kind && !KINDS.includes(kind)) return invalid(res, `kind must be one of ${KINDS.join(', ')}`);
         const status = typeof req.query.status === 'string' && req.query.status ? req.query.status : null;
         if (status && !STATUSES.includes(status)) return invalid(res, `status must be one of ${STATUSES.join(', ')}`);
-        const out = await entries.list({
-            limit, kind, status,
+        const scope = typeof req.query.scope === 'string' && req.query.scope ? req.query.scope : null;
+        if (scope && !SCOPES.includes(scope)) return invalid(res, `scope must be one of ${SCOPES.join(', ')}`);
+        const label = typeof req.query.label === 'string' && req.query.label ? req.query.label.toLowerCase() : null;
+        if (label && !LABELS.includes(label)) return invalid(res, `label must be one of ${LABELS.join(', ')}`);
+        const sort = req.query.sort == null || req.query.sort === '' ? 'newest' : String(req.query.sort);
+        if (sort !== 'newest' && sort !== 'top') return invalid(res, 'sort must be newest or top');
+        const window = req.query.window == null || req.query.window === '' ? null : String(req.query.window);
+        if (window && !['day', 'week', 'month', 'all'].includes(window)) return invalid(res, 'window must be day, week, month or all');
+        const channel = req.query.channel == null || req.query.channel === '' ? null : req.query.channel;
+        const checkout = await entries.list({
+            limit, kind, status, scope, label, sort, window,
+            q: typeof req.query.q === 'string' && req.query.q.trim() ? req.query.q.trim() : null,
+            channel,
             cursor: typeof req.query.cursor === 'string' && req.query.cursor ? req.query.cursor : null,
         });
-        if (out.error === 'cursor') return invalid(res, 'cursor is not a cursor this API handed out');
+        if (checkout.error === 'cursor') return invalid(res, 'cursor is not a cursor this API handed out');
+        if (checkout.error === 'scope') return invalid(res, `scope must be one of ${SCOPES.join(', ')}`);
+        if (checkout.error === 'label') return invalid(res, `label must be one of ${LABELS.join(', ')}`);
+        if (checkout.error === 'sort') return invalid(res, 'sort must be newest or top');
+        if (checkout.error === 'window') return invalid(res, 'window must be day, week, month or all');
+        if (checkout.error === 'channel') return invalid(res, 'channel must be a stream id');
         res.set('Cache-Control', 'public, max-age=60');
-        return res.json({ count: out.entries.length, entries: out.entries, next_cursor: out.next_cursor });
+        return res.json({ count: checkout.entries.length, entries: checkout.entries, next_cursor: checkout.next_cursor });
     });
 
     r.get('/entries/:slug/series', async (req, res) => {
@@ -111,20 +134,36 @@ function createApi(ctx) {
         return res.json({ slug: row.slug, ...out });
     });
 
+    // GET /entries/:slug — the origin, citations, spread, variations, Media examples, related memes and the
+    // approved revision history. A pending proposal is visible to its author and staff only.
     r.get('/entries/:slug', async (req, res) => {
         const row = await entries.bySlug(String(req.params.slug || ''));
         const staff = isStaff(req.principal);
-        if (!row || (row.visibility === 'hidden' && !staff)) return problem(res, 404, 'meme.not_found', 'No such meme.');
-        const citations = await entries.citations(row.id);
+        const mine = Boolean(row && row.submitted_by && req.principal.kind === 'user' && req.principal.subject === row.submitted_by);
+        if (!row || (row.visibility === 'hidden' && !staff && !mine)) return problem(res, 404, 'meme.not_found', 'No such meme.');
+        const out = await entries.detail(row, { staff: staff || mine });
+        const verdict = await entries.judgement(row.id);
         if (row.visibility === 'public') res.set('Cache-Control', 'public, max-age=60');
         else if (row.visibility === 'unlisted') res.set('Cache-Control', 'private, max-age=60');
+        else res.set('Cache-Control', 'private, no-store');
         return res.json({
-            ...entries.wireEntry(row),
-            origin: citations.find((c) => c.role === 'origin') || citations[0] || null,
-            citations,
-            timeline: citations.filter((c) => c.role !== 'example'),
-            examples: citations.filter((c) => c.role === 'example'),
+            ...out,
+            // The judge's own words about the entry: where it started and how people use it.
+            ...(verdict && verdict.origin ? { notes: { origin: verdict.origin, spread: verdict.spread, examples: verdict.examples } } : {}),
+            ...(staff && verdict ? { judgement: { score: verdict.score, reason: verdict.reason, judged_at: verdict.judged_at, model: verdict.model, provider: verdict.provider } } : {}),
         });
+    });
+
+    // GET /entries/:slug/revisions — approved history for anyone; pending/rejected too for staff.
+    r.get('/entries/:slug/revisions', async (req, res) => {
+        const row = await entries.bySlug(String(req.params.slug || ''));
+        const staff = isStaff(req.principal);
+        const mine = Boolean(row && row.submitted_by && req.principal.kind === 'user' && req.principal.subject === row.submitted_by);
+        if (!row || (row.visibility === 'hidden' && !staff && !mine)) return problem(res, 404, 'meme.not_found', 'No such meme.');
+        const revisions = await entries.revisionsOf(row.id, { staff: staff || mine });
+        if (row.visibility === 'public') res.set('Cache-Control', 'public, max-age=60');
+        else res.set('Cache-Control', 'private, no-store');
+        return res.json({ slug: row.slug, count: revisions.length, revisions });
     });
 
     r.get('/trending', async (req, res) => {
@@ -133,6 +172,18 @@ function createApi(ctx) {
         const rows = await entries.trending({ limit });
         res.set('Cache-Control', 'public, max-age=60');
         return res.json({ count: rows.length, entries: rows });
+    });
+
+    // GET /trends?window=day|week — rising Reddit posts (official API data) with upvote velocity, the templates
+    // their pictures reveal, and the public entries used in the same window.
+    r.get('/trends', async (req, res) => {
+        const window = req.query.window == null || req.query.window === '' ? 'day' : String(req.query.window);
+        if (!['day', 'week'].includes(window)) return invalid(res, 'window must be day or week');
+        const limit = req.query.limit == null || req.query.limit === '' ? 50 : Number.parseInt(req.query.limit, 10);
+        if (!Number.isFinite(limit) || limit < 1 || limit > 100) return invalid(res, 'limit must be from 1 to 100');
+        const out = await trends.read({ window, limit });
+        res.set('Cache-Control', 'public, max-age=120');
+        return res.json(out);
     });
 
     r.get('/week', async (req, res) => {
@@ -164,6 +215,91 @@ function createApi(ctx) {
         return res.json(out);
     });
 
+    // ── Analyse ─────────────────────────────────────────────
+    // POST /analyze { url | media_id } — the vision call, the structured extraction, the matched entries/template,
+    // origin guesses with confidence, meaning/usage, L1 labels, and a Reddit URL's spread and comments tone.
+    // A person only: every analysis spends OpenVibe.AI calls, so a signed-out caller could spend the day's budget.
+    r.post('/analyze', requirePerson, async (req, res) => {
+        const b = req.body && typeof req.body === 'object' ? req.body : {};
+        const who = { subject: req.principal.subject, kind: 'analyze', staff: isStaff(req.principal) };
+        const share = await personCap.check(who);
+        if (!share.ok) return problem(res, share.status, share.code, share.message);
+        const out = await analyzer.analyze({
+            url: typeof b.url === 'string' ? b.url : null,
+            mediaId: typeof b.media_id === 'string' ? b.media_id : null,
+            subject: req.principal.subject,
+        });
+        if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'that meme could not be analysed');
+        await personCap.add(who);
+        res.set('Cache-Control', 'private, no-store');
+        return res.json(out.analysis);
+    });
+
+    // ── Deep dives (M5) ─────────────────────────────────────
+    // POST /research { topic } — start the job; 202 with the id, then GET /research/:id until succeeded or failed.
+    r.post('/research', requirePerson, async (req, res) => {
+        const b = req.body && typeof req.body === 'object' ? req.body : {};
+        const who = { subject: req.principal.subject, kind: 'research', staff: isStaff(req.principal) };
+        const share = await personCap.check(who);
+        if (!share.ok) return problem(res, share.status, share.code, share.message);
+        const out = await research.create({ topic: b.topic, subject: req.principal.subject });
+        if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'invalid research');
+        await personCap.add(who);
+        res.set('Location', `/api/v1/research/${out.research.id}`);
+        return res.status(202).json(out.research);
+    });
+
+    // A succeeded read is public; a queued/running/failed one is visible to its author and staff only.
+    r.get('/research/:id', async (req, res) => {
+        const row = await research.get(String(req.params.id || ''));
+        if (!row) return problem(res, 404, 'meme.not_found', 'No such research job.');
+        const mine = req.principal.kind === 'user' && row.subject === req.principal.subject;
+        if (row.status !== 'succeeded' && !mine && !isStaff(req.principal)) return problem(res, 404, 'meme.not_found', 'No such research job.');
+        res.set('Cache-Control', row.status === 'succeeded' ? 'public, max-age=60' : 'private, no-store');
+        const out = { ...row };
+        if (!mine && !isStaff(req.principal)) delete out.subject;
+        return res.json(out);
+    });
+
+    // Save a succeeded read as a public deep-dive entry (its full text stays in meme_deep_dives).
+    r.post('/research/:id/entry', requirePerson, async (req, res) => {
+        const row = await research.get(String(req.params.id || ''));
+        if (!row) return problem(res, 404, 'meme.not_found', 'No such research job.');
+        if (row.subject !== req.principal.subject && !isStaff(req.principal)) return problem(res, 403, 'meme.forbidden', 'This research job belongs to someone else.');
+        const out = await research.save({ id: row.id, subject: req.principal.subject, staff: isStaff(req.principal) });
+        if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'the read could not be saved');
+        res.set('Location', `/api/v1/entries/${out.entry.slug}`);
+        return res.status(out.already ? 200 : 201).json({ entry: out.entry, already: Boolean(out.already) });
+    });
+
+    // The full text of a saved deep dive, for the entry page.
+    r.get('/entries/:slug/deep-dive', async (req, res) => {
+        const entry = await entries.bySlug(String(req.params.slug || ''));
+        if (!entry || entry.visibility !== 'public') return problem(res, 404, 'meme.not_found', 'No such deep dive.');
+        const dive = await research.deepDiveFor(entry.id);
+        if (!dive) return problem(res, 404, 'meme.not_found', 'No deep dive for that entry.');
+        res.set('Cache-Control', 'public, max-age=60');
+        return res.json({ slug: entry.slug, title: entry.title, ...dive });    });
+
+    // ── Generate (M6) ───────────────────────────────────────
+    // POST /generate { template_slug | topic, lines? } — research current uses, write the captions, render the
+    // template's own PNG with bundled fonts, store it in Media and save the caption with its labels.
+    r.post('/generate', requirePerson, async (req, res) => {
+        const b = req.body && typeof req.body === 'object' ? req.body : {};
+        const who = { subject: req.principal.subject, kind: 'generate', staff: isStaff(req.principal) };
+        const share = await personCap.check(who);
+        if (!share.ok) return problem(res, share.status, share.code, share.message);
+        const out = await generator.generate({
+            templateSlug: typeof b.template_slug === 'string' ? b.template_slug : null,
+            topic: typeof b.topic === 'string' ? b.topic : null,
+            lines: b.lines === undefined ? null : b.lines,
+            subject: req.principal.subject,
+        });
+        if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'the meme could not be generated');
+        await personCap.add(who);
+        res.set('Location', `/api/v1/captions/${out.caption.id}`);
+        return res.status(201).json({ media_id: out.media_id, media_url: out.media_url, captions: out.captions, template: out.template, labels: out.labels, caption: out.caption, cost_usd: out.cost_usd });
+    });
     // ── Signed-in writes ────────────────────────────────────
     r.post('/week/vote', requirePerson, async (req, res) => {
         const entryId = req.body && typeof req.body.entry_id === 'string' ? req.body.entry_id.trim() : '';
@@ -202,6 +338,52 @@ function createApi(ctx) {
         return res.status(201).json({ id: out.report.id, status: out.report.status, created_at: out.report.created_at });
     });
 
+    // ── The encyclopedia: proposals and wiki-style revisions ──
+    // POST /entries — a signed-in person proposes an entry (born hidden, revision 1 pending). Staff proposals are
+    // approved and public at once. The body is the entry plus origin, spread, variations, examples and related.
+    r.post('/entries', requirePerson, async (req, res) => {
+        const out = await entries.createProposal({
+            body: req.body || {},
+            author: req.principal.subject,
+            staff: isStaff(req.principal),
+        });
+        if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'invalid entry', out.field);
+        res.set('Location', `/api/v1/entries/${out.entry.slug}`);
+        return res.status(out.entry.visibility === 'public' ? 201 : 202).json({
+            entry: out.entry, revision: out.revision, review: out.revision ? out.revision.moderation_state : null,
+        });
+    });
+
+    // POST /entries/:slug/revisions — a proposed edit. A person's waits for review; staff's applies at once.
+    r.post('/entries/:slug/revisions', requirePerson, async (req, res) => {
+        const out = await entries.addRevision(String(req.params.slug || ''), {
+            body: req.body || {},
+            author: req.principal.subject,
+            staff: isStaff(req.principal),
+        });
+        if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'invalid revision', out.field);
+        res.set('Location', `/api/v1/entries/${out.entry.slug}/revisions`);
+        return res.status(out.revision && out.revision.moderation_state === 'approved' ? 201 : 202).json({
+            entry: out.entry, revision: out.revision,
+        });
+    });
+
+    r.post('/entries/:slug/revisions/:revision/review', requireStaff, async (req, res) => {
+        const b = req.body && typeof req.body === 'object' ? req.body : {};
+        const out = await entries.reviewRevision(String(req.params.slug || ''), req.params.revision, {
+            state: b.state,
+            reviewedBy: req.principal.subject,
+            note: b.note == null || b.note === '' ? null : String(b.note).trim().slice(0, 1000),
+        });
+        if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'invalid review');
+        return res.json(out);
+    });
+
+    r.get('/moderation/revisions', requireStaff, async (req, res) => {
+        const revisions = await entries.pendingRevisions({ limit: asInt(req.query.limit, 50) });
+        return res.json({ count: revisions.length, revisions });
+    });
+
     // ── Staff ───────────────────────────────────────────────
     r.post('/entries/:slug/publish', requireStaff, async (req, res) => {
         const out = await entries.publish(String(req.params.slug || ''), { changedBy: req.principal.subject });
@@ -224,6 +406,33 @@ function createApi(ctx) {
     r.get('/reports', requireStaff, async (req, res) => {
         const reports = await entries.listOpenReports({ limit: asInt(req.query.limit, 100) });
         return res.json({ count: reports.length, reports });
+    });
+
+    // ── The staff list: the candidates that stayed hidden ──
+    r.get('/staff/candidates', requireStaff, async (req, res) => {
+        const limit = asInt(req.query.limit, 100);
+        const kind = typeof req.query.kind === 'string' && req.query.kind ? req.query.kind : null;
+        if (kind && !KINDS.includes(kind)) return invalid(res, `kind must be one of ${KINDS.join(', ')}`);
+        const list = await entries.listHidden({ limit, kind });
+        return res.json({ count: list.length, candidates: list });
+    });
+
+    r.get('/staff/candidates/:slug', requireStaff, async (req, res) => {
+        const row = await entries.bySlug(String(req.params.slug || ''));
+        if (!row) return problem(res, 404, 'meme.not_found', 'No such meme.');
+        const [citations, verdict, history] = await Promise.all([
+            entries.citations(row.id),
+            entries.judgement(row.id),
+            entries.decisions(row.id),
+        ]);
+        return res.json({
+            ...entries.wireEntry(row),
+            score: verdict ? verdict.score : null,
+            reason: verdict ? verdict.reason : null,
+            judgement: verdict,
+            citations,
+            decisions: history,
+        });
     });
 
     return r;

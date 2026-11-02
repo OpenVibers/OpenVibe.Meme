@@ -51,10 +51,10 @@ html.ov-motion .mm-tree-lines path:nth-child(n+4) { animation-delay: .5s; }
     background: var(--bg-card, #0f1729); border: 1px solid color-mix(in srgb, var(--room-accent) 45%, var(--border, #1f2d47)); box-shadow: 0 8px 22px rgba(0, 0, 0, .22); }
 .mm-node small { font-weight: 600; color: var(--text-muted, #7386a3); font-size: .7rem; }
 .mm-node-root { left: 50%; top: 22%; padding: 10px 16px; font-size: .95rem; background: var(--room-fill); color: var(--room-on); border-color: transparent; }
-.mm-node-root small { color: inherit; opacity: .75; }
+.mm-node-root small { color: inherit; opacity: .92; }
 .mm-n1 { left: 23%; top: 67%; } .mm-n2 { left: 50%; top: 67%; } .mm-n3 { left: 77%; top: 67%; }
 .mm-sticker { position: absolute; padding: 4px 10px; border-radius: 8px; font: 900 .78rem/1 Impact, 'Arial Black', sans-serif; letter-spacing: .04em; text-transform: uppercase; color: #fff;
-    background: color-mix(in srgb, var(--room-accent) 70%, #000); rotate: -8deg; box-shadow: 0 6px 14px rgba(0, 0, 0, .25); }
+    background: color-mix(in srgb, var(--room-accent) 58%, #000); rotate: -8deg; box-shadow: 0 6px 14px rgba(0, 0, 0, .25); }
 .mm-s1 { left: 6%; top: 88%; } .mm-s2 { left: 31%; top: 90%; rotate: 7deg; } .mm-s3 { left: 82%; top: 89%; rotate: -4deg; }
 html.ov-motion .mm-sticker { animation: mm-fan .7s cubic-bezier(.2,.9,.3,1.3) both; animation-delay: calc(.9s + var(--d, 0s)); }
 .mm-s2 { --d: .12s; } .mm-s3 { --d: .24s; }
@@ -158,3 +158,24 @@ html.ov-motion .mm-demo-bars i { animation: mm-bar .9s cubic-bezier(.2,.7,.2,1) 
 @media (max-width: 860px) { .mm-make-grid { grid-template-columns: minmax(0, 1fr); } .mm-preview { position: static; order: -1; } }
 @media (prefers-reduced-motion: reduce) { .mm-tree-lines path, .mm-sticker, .mm-demo-bars i { animation: none !important; } }
 html[data-ov-motion=reduced] .mm-tree-lines path, html[data-ov-motion=reduced] .mm-sticker, html[data-ov-motion=reduced] .mm-demo-bars i { animation: none !important; }
+
+/* Be the first (10-31): what is still missing, one short row below the scenes, never an empty section up top. */
+.mm-first-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 10px; }
+.mm-first-list li { display: grid; gap: 4px; padding: 14px 16px; border-radius: 16px; border: 1px dashed color-mix(in srgb, var(--room-accent) 45%, var(--border, #1f2d47)); }
+.mm-first-list span { color: var(--text-secondary, #96a7c2); font-size: 14px; line-height: 1.45; }
+.mm-first-list a { justify-self: start; margin-top: 4px; font-weight: 700; color: var(--room-strong, var(--room-accent)); }
+
+/* Tables on a phone (phone sweep, 2026-11-01): a table of three columns or more whose cells name their column (data-label) shows each row as a card, the first
+   cell its title and every other cell named by its column (html.js gives each cell its data-label). Narrower tables
+   stay tables. Nothing is left out and nothing scrolls sideways. */
+@media (max-width: 640px) {
+    .table-wrap:has(> table thead th:nth-child(3)):has(> table td[data-label]) { overflow: visible; }
+    .table-wrap > table:has(thead th:nth-child(3)):has(td[data-label]) { display: block; }
+    .table-wrap > table:has(thead th:nth-child(3)):has(td[data-label]) thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .table-wrap > table:has(thead th:nth-child(3)):has(td[data-label]) tbody { display: grid; gap: 10px; }
+    .table-wrap > table:has(thead th:nth-child(3)):has(td[data-label]) tr { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--border, #1f2d47); border-radius: 14px; background: var(--bg-card, var(--bg-secondary, #101828)); }
+    .table-wrap > table:has(thead th:nth-child(3)):has(td[data-label]) td { display: block; min-width: 0; padding: 0; border: 0; overflow-wrap: anywhere; }
+    .table-wrap > table:has(thead th:nth-child(3)):has(td[data-label]) td:first-child { font-weight: 700; color: var(--text-primary, #e6edf7); }
+    .table-wrap > table:has(thead th:nth-child(3)):has(td[data-label]) td[data-label]:not(:first-child)::before { content: attr(data-label); display: block; margin-bottom: 2px; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted, #7386a3); }
+    .table-wrap > table:has(thead th:nth-child(3)):has(td[data-label]) td:empty { display: none; }
+}

@@ -21,6 +21,8 @@ function createLifecycle({ server, ctx, exit, signals, timers = [], extra = [] }
             () => ctx.keys.client.stop(),
             () => ctx.importer.stop(),
             () => ctx.reverifier.stop(),
+            () => ctx.judgeJob.stop(),
+            () => ctx.reddit.stop(),
             async () => { clearInterval(ctx.telemetryTick); if (ctx.retention) await ctx.retention.stop(); if (ctx.telemetry) await ctx.telemetry.stop(); },
             () => ctx.s.close(),
             ...extra,
@@ -32,7 +34,10 @@ async function start() {
     const { app, ctx } = await createApp();
     const { config } = ctx;
 
-    const server = app.listen(config.port, config.host, () => {
+    // Socket activation (2026-10-31): systemd's .socket unit holds the listener across restarts, so a deploy
+    // queues requests in the kernel instead of answering 502. Without the socket unit, the usual listen.
+    const socketActivated = process.env.LISTEN_FDS === '1' && Number(process.env.LISTEN_PID) === process.pid;
+    const server = app.listen(...(socketActivated ? [{ fd: 3 }] : [config.port, config.host]), () => {
         console.log(`[OpenVibe.Meme] ${config.nodeEnv} on http://${config.host}:${config.port} → ${config.baseUrl} (db ${ctx.s.db.store})`);
         // Warm the Network signing key immediately: a service nobody has signed in to yet must not read degraded
         // only because the first JWKS fetch had not happened.
@@ -47,6 +52,10 @@ async function start() {
     // Jobs. Each refuses to start under MEME_DRILL; tests call their runOnce().
     ctx.importer.start();
     ctx.reverifier.start();
+    ctx.judgeJob.start();
+    ctx.reddit.start();
+    // The Reddit source is created disabled in Sources, once, when the owner asks (MEME_SOURCES_REGISTER=1).
+    if (!config.drill) ctx.sourceRegistration.ensure().catch(() => {});
 
     // The two account topics (export_requested, deleted) at OpenVibe.Events: idempotent; off without the URL, the
     // delivery secret and the client secret. The consumer itself is mounted in server/app.js.

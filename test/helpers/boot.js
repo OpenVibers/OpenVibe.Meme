@@ -16,6 +16,7 @@ process.env.MEME_LIMITS_HOUR = process.env.MEME_LIMITS_HOUR || '100000';
 const http = require('http');
 const { startNetwork } = require('./mocks');
 const { startUpstreams } = require('./upstreams');
+const { startAi } = require('./ai');
 
 const captured = [];
 for (const m of ['log', 'info', 'warn', 'error']) {
@@ -26,6 +27,7 @@ for (const m of ['log', 'info', 'warn', 'error']) {
 async function boot(opts = {}) {
     const network = await startNetwork(opts.network || {});
     const upstreams = await startUpstreams(opts.upstreams || {});
+    const ai = await startAi(opts.ai || {});
     const env = {
         NODE_ENV: 'test', PORT: '0', BASE_URL: 'https://openvibe.meme', TRUST_PROXY: '1',
         OV_NETWORK_URL: network.url, OV_NETWORK_INTERNAL_URL: network.url,
@@ -33,6 +35,7 @@ async function boot(opts = {}) {
         MEME_DRILL: '1',
         MEME_EVENTS_URL: network.url,
         OV_CHAT_URL: upstreams.url, OV_LIVE_URL: upstreams.url, OV_VIDEO_URL: upstreams.url,
+        OV_AI_INTERNAL_URL: ai.url,
         ...(opts.env || {}),
     };
     for (const [k, v] of Object.entries(opts.env || {})) if (v === null) delete env[k];
@@ -44,7 +47,10 @@ async function boot(opts = {}) {
     const { createStore } = require('../../server/db');
     const testdb = await require('./db').testDb();
     const store = createStore(testdb.db, { now: opts.now });
-    const built = await createApp({ config, store, log, telemetrySink: opts.telemetrySink, accountSend: opts.accountSend });
+    const built = await createApp({ config, store, log, telemetrySink: opts.telemetrySink, accountSend: opts.accountSend,
+        media: opts.media, reddit: opts.reddit, ai: opts.ai, aiClient: opts.aiClient, aiBudget: opts.aiBudget,
+        redditReader: opts.redditReader, redditRead: opts.redditRead, researchAi: opts.researchAi,
+        generateAi: opts.generateAi, generateMedia: opts.generateMedia, mediaObjects: opts.mediaObjects });
     await built.ctx.keys.ensure();
     const server = await new Promise((resolve) => { const s = http.createServer(built.app); s.listen(0, '127.0.0.1', () => resolve(s)); });
     const base = `http://127.0.0.1:${server.address().port}`;
@@ -75,17 +81,20 @@ async function boot(opts = {}) {
     }
 
     const t = {
-        base, network, upstreams, config, ctx: built.ctx, get, signIn, dbDump,
+        base, network, upstreams, ai, config, ctx: built.ctx, get, signIn, dbDump,
         logs: () => captured.join('\n'),
         async close() {
             built.ctx.importer.stop();
             built.ctx.reverifier.stop();
+            built.ctx.judgeJob.stop();
+            built.ctx.reddit.stop();
             await new Promise((r) => server.close(r));
             built.ctx.keys.client.stop();
             await built.ctx.telemetry.stop().catch(() => {});
             await testdb.close();
             await network.close();
             await upstreams.close();
+            await ai.close();
         },
     };
     return t;

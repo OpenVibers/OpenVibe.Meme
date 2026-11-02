@@ -73,21 +73,29 @@ function treeMotif() {
 
 function home({ trending = [], week = null, counts = {} } = {}) {
     const candidates = week ? week.candidates.slice(0, 3) : [];
-    const live = `<section class="mm-section" id="mm-trending" aria-labelledby="mm-trending-h">
+    // Real first (the owner, 10-31: empty sections made the rooms look unfinished). Trending and the week's teaser show only
+    // when they have entries; while neither does, one short "be the first" row sits below the scenes instead.
+    const trendingSec = trending.length ? `<section class="mm-section" id="mm-trending" aria-labelledby="mm-trending-h">
 <div class="mm-head-row"><h2 id="mm-trending-h">Trending</h2><span class="mm-count">${Number(counts.entries) || trending.length} public ${Number(counts.entries) === 1 ? 'entry' : 'entries'}</span></div>
-${trending.length ? `<ol class="mm-entries">${trending.slice(0, 8).map(card).join('')}</ol>` : empty('No entry is public yet. The first proof is being checked against its source.', '/developers', 'How entries are built')}
-</section>
-<section class="mm-section" id="mm-week-teaser" aria-labelledby="mm-week-teaser-h">
+<ol class="mm-entries">${trending.slice(0, 8).map(card).join('')}</ol>
+</section>` : '';
+    const weekSec = candidates.length ? `<section class="mm-section" id="mm-week-teaser" aria-labelledby="mm-week-teaser-h">
 <div class="mm-head-row"><h2 id="mm-week-teaser-h">Meme of the week</h2><a class="mm-more" href="/week">The ballot${kit.icon('chevron')}</a></div>
-${candidates.length ? `<ol class="mm-entries mm-entries-week">${candidates.map(card).join('')}</ol>` : empty('No candidate has a use this week yet. The ballot opens as soon as one does.')}
-</section>`;
+<ol class="mm-entries mm-entries-week">${candidates.map(card).join('')}</ol>
+</section>` : '';
+    const firsts = [
+        !trending.length && ['The first entries are on their way', 'Each one is checked against the chat line or VOD second it started from before it is public.', '/developers', 'How entries are built'],
+        !candidates.length && ['Make the first caption', 'Pick a template, write the lines, and it is saved as text anyone can remix.', '/make', 'Open the generator'],
+    ].filter(Boolean);
+    const beFirst = firsts.length ? `<section class="mm-section mm-first" aria-labelledby="mm-first-h"><h2 id="mm-first-h">Be the first</h2><ul class="mm-first-list">${firsts.map(([title, text, href, label]) => `<li><b>${esc(title)}</b><span>${esc(text)}</span><a href="${esc(href)}">${esc(label)}</a></li>`).join('')}</ul></section>` : '';
+    const live = `${trendingSec}${weekSec}`;
     const room = sc.room({
         room: 'meme',
         hero: {
             title: 'Every joke has a first time',
             lede: 'The open meme database. Each running joke is written down with the moment it happened, a chat line, a VOD second, a Rundown segment, and every later use. People vote for meme of the week, and anyone can caption a template.',
             start: { href: '/week', label: 'Vote for meme of the week' },
-            chips: [{ label: 'Make a caption', href: '/make' }, { label: 'Trending', href: '#mm-trending' }, { label: 'The API', href: '/developers' }],
+            chips: [{ label: 'Make a caption', href: '/make' }, ...(trending.length ? [{ label: 'Trending', href: '#mm-trending' }] : []), { label: 'The API', href: '/developers' }],
             proof: Number(counts.entries) ? [{ value: Number(counts.entries), label: Number(counts.entries) === 1 ? 'entry' : 'entries' }] : [],
             motif: treeMotif(),
         },
@@ -108,8 +116,11 @@ ${candidates.length ? `<ol class="mm-entries mm-entries-week">${candidates.map(c
             ['Is the database open?', 'Yes: every public entry and citation is in the API, and in OpenVibe\'s Search.'],
         ] },
     });
+    // What is real goes above the scenes; what is still missing goes after them.
     const at = room.indexOf('<section class="sc-room-scenes"');
-    return `<div class="mm-wrap mm-home" id="mm-home">${at < 0 ? room : room.slice(0, at) + live + room.slice(at)}</div>`;
+    const end = at < 0 ? -1 : room.indexOf('</section>', at) + '</section>'.length;
+    const page = at < 0 ? live + room + beFirst : room.slice(0, at) + live + room.slice(at, end) + beFirst + room.slice(end);
+    return `<div class="mm-wrap mm-home" id="mm-home">${page}</div>`;
 }
 
 function entry({ e, citations = [], signedIn = false, staff = false, reported = false, problem = null } = {}) {

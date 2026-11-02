@@ -38,6 +38,22 @@ const { createSearchIndex } = require('./search');
 const { createUpstreams } = require('./upstreams');
 const { createImporter } = require('./importer');
 const { createReverifier } = require('./reverify');
+const { createMemeAi } = require('./ai/client');
+const { createContext } = require('./ai/context');
+const { createJudge } = require('./ai/judge');
+const { createJudgeJob } = require('./jobs/judge');
+const { createMediaStore } = require('./media');
+const { createTrends } = require('./trends');
+const { createRedditTrends } = require('./reddit');
+const { createSourceRegistration } = require('./source-registration');
+const { createAiRunner } = require('./ai');
+const { createRedditReader } = require('./reddit-read');
+const { createAnalyzer } = require('./analyze');
+const { createResearchAi } = require('./research-ai');
+const { createResearch } = require('./research');
+const { createGenerateAi } = require('./generate-ai');
+const { createGenerateMedia } = require('./generate-media');
+const { createGenerator } = require('./generate');
 const { createNetworkSender } = require('openvibe-sdk/account-data');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -64,6 +80,25 @@ async function createApp(opts = {}) {
     const upstreams = createUpstreams({ config, fetchImpl, log });
     const importer = createImporter({ config, s, entries, upstreams, fetchImpl, log });
     const reverifier = createReverifier({ config, s, entries, upstreams, log });
+    // The judge: OpenVibe.AI scores each candidate from its own citations and writes the entry; the publish rule
+    // decides what becomes public.
+    const ai = createMemeAi({ config, fetchImpl, log });
+    const context = createContext({ config, upstreams, log });
+    const judge = createJudge({ config, ai, context, log });
+    const judgeJob = createJudgeJob({ config, s, entries, judge, context, log });
+    // Reddit trends: the official API, the templates it keeps discovering and the pictures it stores in Media.
+    const media = opts.media || createMediaStore({ config, fetchImpl, log });
+    const trends = createTrends({ s });
+    const reddit = createRedditTrends({ config, s, media, fetchImpl, log, ...(opts.reddit || {}) });
+    const sourceRegistration = createSourceRegistration({ config, fetchImpl, log });
+    const aiRunner = opts.ai || createAiRunner({ config, s, fetchImpl, log, client: opts.aiClient, budget: opts.aiBudget });
+    const redditReader = opts.redditReader || createRedditReader({ config, fetchImpl, ...(opts.redditRead || {}) });
+    const analyzer = createAnalyzer({ config, s, ai: aiRunner, reddit: redditReader, fetchImpl, log });
+    const researchAi = opts.researchAi || createResearchAi({ config, s, fetchImpl, log, client: opts.aiClient });
+    const research = createResearch({ config, s, entries, ai: researchAi, log });
+    const generateAi = opts.generateAi || createGenerateAi({ config, s, fetchImpl, log, client: opts.aiClient });
+    const generateMedia = opts.generateMedia || createGenerateMedia({ config, fetchImpl, log, objects: opts.mediaObjects });
+    const generator = createGenerator({ config, s, entries, ai: generateAi, media: generateMedia, fetchImpl, log });
 
     // Account export and deletion (ADR-033). The sender posts to Network's internal routes with this service's own
     // client-credentials token; a test injects a stand-in through opts.accountSend.
@@ -74,6 +109,11 @@ async function createApp(opts = {}) {
 
     const ctx = {
         config, s, keys, sso, principal, search, entries, upstreams, importer, reverifier, accountData, accountSend, log,
+        ai: aiRunner, judgeAi: ai, context, judge, judgeJob,
+        media, trends, reddit, sourceRegistration,
+        redditReader, analyzer,
+        researchAi, research,
+        generateAi, generateMedia, generator,
     };
 
     const app = express();
@@ -117,7 +157,7 @@ async function createApp(opts = {}) {
     // ── Machine endpoints ───────────────────────────────────
     app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'openvibe-meme', name: 'OpenVibe.Meme', version: VERSION }));
     release.mount(app, { registry: metrics.registry });
-    const readiness = createServiceReadiness({ s, config, release: release.release, valkey });
+    const readiness = createServiceReadiness({ s, config, release: release.release, valkey, sso});
     app.get('/api/ready', readiness.handler);
 
     // ── Who is asking (verified offline; refreshed when expired) ──
