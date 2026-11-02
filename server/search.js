@@ -46,7 +46,8 @@ function documentOf(entry, citations = [], { baseUrl = 'https://openvibe.meme', 
     if (!entry || entry.visibility !== 'public') return { owner: OWNER, type: TYPE, id: entry.id, revision, deleted: true };
     const live = (citations || []).filter((c) => c.source_status === 'live');
     const sources = [...new Set(live.map((c) => c.source_service))];
-    const body = [entry.title, entry.summary || '', entry.meaning || '', entry.usage || '',
+    // The snippet reads the summary and the body together: the body leaves out the title and summary.
+    const body = [entry.meaning || '', entry.usage || '',
         ...(origin && origin.title ? [origin.title] : []), ...live.map((c) => c.quote_text)]
         .filter(Boolean).join('\n').slice(0, 48_000);
     const provenance = [
