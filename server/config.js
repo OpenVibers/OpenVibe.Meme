@@ -61,6 +61,10 @@ function load(env = process.env) {
             scope: env.MEME_EVENTS_SCOPE || 'events.event.publish',
         },
 
+        // OpenVibe.Search's owner API: the documents queued in meme_outbox are delivered there (server/app.js,
+        // openvibe-publishing/search-relay) with this service's token (search.document.write). Unset: they wait.
+        search: { url: trim(env.MEME_SEARCH_URL || '') },
+
         // The public APIs the importer reads. No service grant is used in v1: these are the anonymous reads a
         // person can make too (OpenVibe.Live's Rundown and transcripts, OpenVibe.Chat's history and timeline).
         upstreams: {

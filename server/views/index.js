@@ -254,7 +254,7 @@ ${ep('POST', '/api/v1/entries/:slug/hide', 'Remove it from public lists and tomb
 ${ep('PATCH', '/api/v1/entries/:slug', '<code>{ title, kind, status }</code>: change an entry; status history is kept.')}
 ${ep('GET', '/api/v1/reports', 'The open takedown/correction reports.')}
 </dl></section>
-<section id="mm-search"><h2>Search</h2><p class="mm-fine">Each public entry is one <code>search.index-document@1</code> (owner <code>meme</code>, type <code>entry</code>, canonical page <code>/m/&lt;slug&gt;</code>) queued in <code>meme_outbox</code>; hiding or deleting an entry queues a tombstone. The importer reads only public APIs and never publishes: a candidate stays hidden until a staff person publishes it.</p></section>
+<section id="mm-search"><h2>Search</h2><p class="mm-fine">Each public entry is one <code>search.index-document@1</code> (owner <code>meme</code>, type <code>entry</code>, canonical page <code>/m/&lt;slug&gt;</code>) queued in <code>meme_outbox</code> and delivered to OpenVibe.Search within a minute; hiding or deleting an entry queues a tombstone. The importer reads only public APIs and never publishes: a candidate stays hidden until a staff person publishes it.</p></section>
 </div>`;
 }
 

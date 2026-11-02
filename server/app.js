@@ -35,6 +35,7 @@ const { raw } = require('./render/html');
 const accountDataLib = require('./identity/account-data');
 const { createStore } = require('./store');
 const { createSearchIndex } = require('./search');
+const { createSearchRelay } = require('openvibe-publishing/search-relay');
 const { createUpstreams } = require('./upstreams');
 const { createImporter } = require('./importer');
 const { createReverifier } = require('./reverify');
@@ -75,7 +76,16 @@ async function createApp(opts = {}) {
     const sso = createSso({ config, keys, fetchImpl, now: s.now, log });
     const principal = createPrincipal({ config, keys });
 
-    const search = createSearchIndex({ config, s });
+    // The queued Search documents (meme_outbox) go to OpenVibe.Search's owner API with this service's token; off
+    // without MEME_SEARCH_URL or the client secret. Started by server/index.js, never under MEME_DRILL.
+    const searchRelay = createSearchRelay({
+        db: s.db, table: 'meme_outbox', owner: 'meme', searchUrl: config.search.url, fetchImpl, now: s.now, log,
+        auth: config.search.url && config.oauth.clientSecret ? contracts.serviceAuth.createTokenClient({
+            tokenUrl: `${config.networkInternalUrl}/oauth/token`, clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret,
+            audience: 'openvibe.search', scope: 'search.document.write', fetchImpl,
+        }) : null,
+    });
+    const search = createSearchIndex({ config, s, onQueued: () => searchRelay.kick() });
     const entries = createStore(s, { search });
     const upstreams = createUpstreams({ config, fetchImpl, log });
     const importer = createImporter({ config, s, entries, upstreams, fetchImpl, log });
@@ -108,7 +118,7 @@ async function createApp(opts = {}) {
         : async () => { throw new Error('OV_OAUTH_CLIENT_SECRET is not set: Meme cannot answer account events'); });
 
     const ctx = {
-        config, s, keys, sso, principal, search, entries, upstreams, importer, reverifier, accountData, accountSend, log,
+        config, s, keys, sso, principal, search, searchRelay, entries, upstreams, importer, reverifier, accountData, accountSend, log,
         ai: aiRunner, judgeAi: ai, context, judge, judgeJob,
         media, trends, reddit, sourceRegistration,
         redditReader, analyzer,
