@@ -23,6 +23,7 @@ function createLifecycle({ server, ctx, exit, signals, timers = [], extra = [] }
             () => ctx.reverifier.stop(),
             () => ctx.judgeJob.stop(),
             () => ctx.reddit.stop(),
+            () => ctx.searchRelay.stop(),
             async () => { clearInterval(ctx.telemetryTick); if (ctx.retention) await ctx.retention.stop(); if (ctx.telemetry) await ctx.telemetry.stop(); },
             () => ctx.s.close(),
             ...extra,
@@ -54,6 +55,8 @@ async function start() {
     ctx.reverifier.start();
     ctx.judgeJob.start();
     ctx.reddit.start();
+    // Queued Search documents → OpenVibe.Search (a tick a few seconds after boot, then every minute).
+    if (!config.drill) ctx.searchRelay.start();
     // The Reddit source is created disabled in Sources, once, when the owner asks (MEME_SOURCES_REGISTER=1).
     if (!config.drill) ctx.sourceRegistration.ensure().catch(() => {});
 

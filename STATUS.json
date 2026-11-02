@@ -40,13 +40,12 @@
     "Search Fabric documents (owner meme, type entry, /m/<slug>) with scope/labels facets and the origin as provenance, in meme_outbox, with a tombstone when an entry is hidden",
     "The caption generator: a template, 1–4 lines × 120 characters, a blocked-word list, server-rendered HTML preview, text lines stored in jsonb",
     "The API: public cursor-paged entries, an entry with citations and timeline, a zero-filled use series, trending, the week, templates, captions, reports, and staff publish/hide/patch",
-    "Search Fabric documents (owner meme, type entry, /m/<slug>) in meme_outbox, with a tombstone when an entry is hidden",
+    "Search Fabric documents (owner meme, type entry, /m/<slug>) in meme_outbox, with a tombstone when an entry is hidden, delivered to Search's owner API by openvibe-publishing/search-relay",
     "Sign-in with OpenVibe.Network (PKCE S256, meme_at/meme_rt/meme_oauth), staff role global_mod+",
     "Account export and deletion over votes, captions and reports",
     "Server-rendered pages with stable mm- ids/classes, cache headers, discovery artifacts and deploy files"
   ],
   "notYet": [
-    "The Search document relay: documents wait in meme_outbox until Network grants meme search.document.write",
     "A per-message Chat permalink API; a chat citation stores the message id and the public history is re-read to verify it",
     "Automatic status transitions by the proposed rising/peaked/classic/dead rules; the importer sets a first status and staff can change it",
     "Real template artwork: v1 ships three data-free local SVG placeholders; a real template is an openvibe.media object",

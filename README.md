@@ -100,8 +100,9 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
   The one service grant Meme holds is OpenVibe.AI's `ai.run.create`, used by the judge and the encyclopedia.
 - **Identity, roles and accounts** — OpenVibe.Network. Meme verifies session tokens against its JWKS; a staff
   route asks for `global_mod` or above.
-- **Search** — OpenVibe.Search. Meme produces `search.index-document@1` documents in its own outbox; the Search
-  document writer is not wired yet because `meme` has no `search.document.write` grant.
+- **Search** — OpenVibe.Search. Meme produces `search.index-document@1` documents in its own outbox, and
+  `openvibe-publishing/search-relay` delivers them to Search's owner API with Meme's `search.document.write` grant
+  (`MEME_SEARCH_URL`; unset, they wait).
 - **Events, the host and the database** — OpenVibe.Events, OpenVibe.Host.
 
 ## Depends on
@@ -304,8 +305,8 @@ A transient 5xx is recorded and changes nothing: a hiccup must not erase a real 
 verbatim quotes as plain text), facets `kind`/`status`/`source`, authorship `ai_assisted`, and one provenance
 reference per live citation. Publishing or editing queues `meme.index_document.upserted`; hiding, deleting or
 losing the origin queues `meme.index_document.deleted` (a tombstone wins over an older revision). Rows live in
-`meme_outbox` in the same transaction as the entry change and wait for the `search.document.write` grant; the relay
-is deliberately not part of v1. The `search-feed` recipe (Work, Help, Rent, Quest) is followed: a document from one
+`meme_outbox` in the same transaction as the entry change; `openvibe-publishing/search-relay` (v1.5.0) sends them to
+Search's owner API a few seconds after the change and every minute, oldest first, superseding a document's older rows. The `search-feed` recipe (Work, Help, Rent, Quest) is followed: a document from one
 row, a sequencer revision in the row, a tombstone when the page is no longer public.
 
 ## Pages
