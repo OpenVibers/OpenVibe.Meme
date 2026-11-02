@@ -52,7 +52,8 @@ function createDiscoveryRoutes(ctx) {
     r.get('/robots.txt', (_req, res) => {
         res.type('text/plain').set('Cache-Control', TEXT).send(
             '# openvibe.meme: the public entries are for search and AI crawlers; sign-in, the API and the internal route are not.\n'
-            + seo.robotsTxt({ sitemaps: [abs('/sitemap.xml')], disallow: DISALLOW }));
+            + seo.robotsTxt({ sitemaps: [abs('/sitemap.xml')], disallow: DISALLOW })
+            + `# Agent manifest: ${abs('/.well-known/agent.json')}\n`);
     });
 
     r.get('/llms.txt', (_req, res) => {

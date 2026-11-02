@@ -74,6 +74,7 @@ function renderPage(o) {
         siteName: SITE_NAME,
         description: o.description || `${SITE_NAME} — ${TAGLINE}`,
         canonical,
+        agentLayer: Boolean(o.agentLayer),
         robots: o.index ? 'index, follow' : 'noindex, nofollow',
         jsonLd: (o.jsonLd || []).filter(Boolean),
         home: '/',
@@ -112,6 +113,10 @@ function send(res, status, o) {
     const personal = o.viewer && o.viewer.kind === 'user';
     if (!res.get('Cache-Control')) res.set('Cache-Control', personal ? cache.htmlHeaders({ private: true }) : (o.cache || cache.htmlHeaders({ private: true })));
     res.set('Vary', 'Cookie');
+    if (o.agentLayer) {
+        const at = `${o.config.baseUrl}${String(o.path || '/').split('?')[0]}`;
+        res.set('Link', require('openvibe-shared/agent-layer').linkHeaderTags(at).header);
+    }
     res.status(status).type('html').send(renderPage(o));
 }
 
