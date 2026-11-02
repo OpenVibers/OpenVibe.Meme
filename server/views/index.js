@@ -21,7 +21,8 @@ const kit = require('openvibe-shared/kit');
 const sc = require('openvibe-shared/showcase');
 
 const STATUS_LABEL = { rising: 'Rising', peaked: 'Peaked', classic: 'Classic', dead: 'Dead' };
-const KIND_LABEL = { joke: 'Joke', catchphrase: 'Catchphrase', bit: 'Bit', meme: 'Meme', saga: 'Saga' };
+// classic: an internet meme from the encyclopedia (Wikidata), whose status is Classic too; its own word avoids "classic · Classic".
+const KIND_LABEL = { joke: 'Joke', catchphrase: 'Catchphrase', bit: 'Bit', meme: 'Meme', saga: 'Saga', classic: 'Internet meme' };
 const SOURCE_LABEL = { chat_message: 'Chat', vod: 'VOD', clip: 'Clip', rundown_segment: 'The Rundown', ai_paste: 'Community', stream_memory: 'Stream memory' };
 
 const statusBadge = (s) => `<span class="mm-status mm-status-${esc(s)}">${esc(STATUS_LABEL[s] || s)}</span>`;
