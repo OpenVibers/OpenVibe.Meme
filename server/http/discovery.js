@@ -59,6 +59,10 @@ function createDiscoveryRoutes(ctx) {
     r.get('/llms.txt', (_req, res) => {
         res.type('text/plain').set('Cache-Control', TEXT).send(seo.llmsTxt({
             name: SITE_NAME,
+            // AGT-5: each of Meme's own pages is linked at its Markdown twin (openvibe-shared 4.108.0 leaves files,
+            // /api/ paths and other sites' links as they are). What an agent may skip is in `optional`, written last.
+            markdown: true,
+            base: site,
             summary: 'OpenVibe.Meme is the open meme database, rebuilt with AI. Every public entry cites the moment a running joke happened (a chat line, a VOD second, a Rundown segment), follows its later uses on a timeline, has a status (rising, peaked, classic, dead), and people vote for meme of the week. A caption generator puts plain text lines over a template image.',
             details: 'GET /api/v1/entries lists public entries; GET /api/v1/entries/:slug adds every citation and the use timeline; GET /api/v1/entries/:slug/series?days=30 is uses per UTC day. GET /api/v1/week lists this ISO week’s candidates and vote counts. The importer reads only public APIs and never publishes: a candidate stays hidden until a staff person publishes it.',
             sections: [
@@ -70,16 +74,17 @@ function createDiscoveryRoutes(ctx) {
                 ] },
                 { title: 'Machine-readable', links: [
                     { title: 'Public entries (JSON)', url: abs('/api/v1/entries') },
-                    { title: 'Sitemap', url: abs('/sitemap.xml') },
-                    { title: 'Full text for language models', url: abs('/llms-full.txt') },
                     { title: 'Release metadata (JSON)', url: abs('/release.json') },
                 ] },
-                { title: 'Elsewhere', links: [
-                    { title: 'OpenVibe.Chat', url: 'https://openvibe.chat', note: 'where a running joke is often typed first' },
-                    { title: 'OpenVibe.Live', url: 'https://openvibe.live', note: 'the Rundown and the VOD transcripts' },
-                    { title: 'OpenVibe.Video', url: 'https://openvibe.video', note: 'the canonical ?t= moment' },
-                    { title: 'OpenVibe.Network', url: 'https://openvibe.network', note: 'accounts and staff roles' },
-                ] },
+            ],
+            // llmstxt.org's "## Optional": what an agent may skip when it needs a shorter context.
+            optional: [
+                { title: 'Sitemap', url: abs('/sitemap.xml') },
+                { title: 'Full text for language models', url: abs('/llms-full.txt') },
+                { title: 'OpenVibe.Chat', url: 'https://openvibe.chat', note: 'where a running joke is often typed first' },
+                { title: 'OpenVibe.Live', url: 'https://openvibe.live', note: 'the Rundown and the VOD transcripts' },
+                { title: 'OpenVibe.Video', url: 'https://openvibe.video', note: 'the canonical ?t= moment' },
+                { title: 'OpenVibe.Network', url: 'https://openvibe.network', note: 'accounts and staff roles' },
             ],
         }));
     });

@@ -190,6 +190,10 @@ function jsonLd(html) {
             const llms = await t.get('/llms.txt');
             assert.strictEqual(llms.status, 200);
             assert.ok(llms.text.includes('OpenVibe.Meme'));
+            // AGT-5: each of Meme's own pages is linked at its Markdown twin, and the secondary links are Optional.
+            assert.ok(llms.text.includes('](https://openvibe.meme/index.md)'), 'the home link is not its twin');
+            assert.ok(llms.text.includes('](https://openvibe.meme/week.md)'), 'the ballot is not its twin');
+            assert.ok(llms.text.includes('\n## Optional\n'), 'no ## Optional section');
         });
     } finally {
         await t.close();
