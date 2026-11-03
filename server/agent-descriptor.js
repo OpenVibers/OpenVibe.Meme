@@ -10,6 +10,7 @@ module.exports = {
     site: 'openvibe.meme',
     api: '/api/v1',
     docs: '/developers',
+    openapi: '/openapi.json',
     policy: {
         auth: ['none', 'Network OIDC'],
         rateLimit: '300 page requests a minute per address; 240 API requests a minute; sign-in limited to 60 attempts per 15 minutes',
