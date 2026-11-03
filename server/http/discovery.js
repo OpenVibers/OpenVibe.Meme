@@ -101,10 +101,12 @@ function createDiscoveryRoutes(ctx) {
 
     r.get('/sitemap.xml', async (_req, res) => {
         const lastmod = siteUpdated();
-        const rows = await s.db.many("SELECT slug, updated_at FROM meme_entries WHERE visibility = 'public' ORDER BY slug LIMIT 5000");
+        // An entry's licensed picture rides its <url> as an image sitemap entry (SEO-17), so image search can find it.
+        const rows = await s.db.many("SELECT slug, updated_at, image_url FROM meme_entries WHERE visibility = 'public' ORDER BY slug LIMIT 5000");
         const urls = [
             ...pages.map((e) => ({ loc: abs(e.path), ...(lastmod ? { lastmod } : {}), changefreq: e.changefreq, priority: e.priority })),
-            ...rows.map((e) => ({ loc: abs(`/m/${e.slug}`), lastmod: dayOf(e.updated_at) || lastmod, changefreq: 'weekly', priority: 0.7 })),
+            ...rows.map((e) => ({ loc: abs(`/m/${e.slug}`), lastmod: dayOf(e.updated_at) || lastmod, changefreq: 'weekly', priority: 0.7,
+                ...(/^https:\/\//.test(e.image_url || '') ? { images: [e.image_url] } : {}) })),
         ];
         res.type('application/xml').set('Cache-Control', TEXT).send(seo.sitemapXml(urls));
     });

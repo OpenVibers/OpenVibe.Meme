@@ -177,9 +177,16 @@ function jsonLd(html) {
             assert.match(js.headers.get('content-type'), /javascript/);
             const robots = await t.get('/robots.txt');
             assert.match(robots.text, /Disallow: \/api\//);
+            await t.ctx.entries.createCandidate({
+                slug: 'shake-weight', title: 'Shake Weight', kind: 'meme', summary: 'A dumbbell that shakes.', status: 'rising', first_seen_at: now, last_seen_at: now,
+                visibility: 'public', citations: [], image_url: 'https://upload.wikimedia.org/wikipedia/commons/0/01/Shake_Weight.jpg', image_credit: 'Someone', image_license: 'CC BY 2.0',
+            });
             const map = await t.get('/sitemap.xml');
             assert.strictEqual(map.status, 200);
             assert.ok(map.text.includes('https://openvibe.meme/m/robot-is-offline'));
+            // SEO-17: an entry's picture is in its <url>; an entry without one has no image entry.
+            assert.match(map.text, /<loc>https:\/\/openvibe\.meme\/m\/shake-weight<\/loc>[^\n]*<image:image><image:loc>https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/0\/01\/Shake_Weight\.jpg<\/image:loc><\/image:image>/);
+            assert.doesNotMatch(map.text, /<loc>https:\/\/openvibe\.meme\/m\/robot-is-offline<\/loc>[^\n]*<image:image>/);
             const llms = await t.get('/llms.txt');
             assert.strictEqual(llms.status, 200);
             assert.ok(llms.text.includes('OpenVibe.Meme'));
