@@ -16,7 +16,7 @@ const { boot, check, done } = require('./helpers/boot');
             assert.strictEqual(m.api, 'https://openvibe.meme/api/v1');
             assert.strictEqual(m.docs, 'https://openvibe.meme/developers');
             assert.deepStrictEqual(m.policy.auth, ['none', 'Network OIDC']);
-            assert.strictEqual(m.openapi, undefined);
+            assert.strictEqual(m.openapi, 'https://openvibe.meme/openapi.json', 'the API document it serves (SEO-3)');
             assert.strictEqual(m.mcp, undefined);
         });
 
