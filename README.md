@@ -376,7 +376,7 @@ forms zone for the POST routes). Not deployed by this change.
 AGPL-3.0-only. See [LICENSE](LICENSE).
 
 <!-- versions:start -->
-- openvibe-contracts: v0.234.0
+- openvibe-contracts: v0.289.1
 - openvibe-sdk: v0.82.0
 - openvibe-shared: v4.109.2
 - openvibe-publishing: v1.5.0
