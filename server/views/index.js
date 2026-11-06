@@ -26,6 +26,11 @@ const KIND_LABEL = { joke: 'Joke', catchphrase: 'Catchphrase', bit: 'Bit', meme:
 const SOURCE_LABEL = { chat_message: 'Chat', vod: 'VOD', clip: 'Clip', rundown_segment: 'The Rundown', ai_paste: 'Community', stream_memory: 'Stream memory' };
 
 const statusBadge = (s) => `<span class="mm-status mm-status-${esc(s)}">${esc(STATUS_LABEL[s] || s)}</span>`;
+
+/** The entry's Share button, built by the shared kit (openvibe-shared 4.114.0 kit.share): the same quiet button with
+ *  the same share icon on every OpenVibe site. It sits right under the title's meta line, beside it when there is
+ *  room, so on a phone it never stands alone on a line of its own. */
+const shareButton = (e, share) => kit.share({ title: e.title, url: share.url, text: e.summary || '', image: share.image || null });
 const kindLabel = (k) => esc(KIND_LABEL[k] || k);
 
 function clock(seconds) {
@@ -124,7 +129,7 @@ function home({ trending = [], week = null, counts = {} } = {}) {
     return `<div class="mm-wrap mm-home" id="mm-home">${page}</div>`;
 }
 
-function entry({ e, citations = [], signedIn = false, staff = false, reported = false, problem = null } = {}) {
+function entry({ e, citations = [], signedIn = false, staff = false, reported = false, problem = null, share = null } = {}) {
     const origin = citations.find((c) => c.role === 'origin') || citations[0] || null;
     const uses = citations.filter((c) => c !== origin);
     const examples = citations.filter((c) => c.role === 'example');
@@ -134,7 +139,7 @@ function entry({ e, citations = [], signedIn = false, staff = false, reported = 
 <header class="mm-entry-h">
 <p class="mm-kicker">${kindLabel(e.kind)} · ${statusBadge(e.status)}${staff ? ' · <span class="mm-staff">staff view</span>' : ''}</p>
 <h1>${esc(e.title)}</h1>
-${e.summary ? `<p class="mm-summary">${esc(e.summary)}</p>` : ''}
+${e.summary ? `<p class="mm-summary">${esc(e.summary)}${share && share.url ? ' ' + shareButton(e, share) : ''}</p>` : (share && share.url ? shareButton(e, share) : '')}
 <dl class="mm-facts">
 <div><dt>First seen</dt><dd><time datetime="${esc(e.first_seen_at)}">${esc(String(e.first_seen_at || '').slice(0, 10))}</time></dd></div>
 <div><dt>Last seen</dt><dd><time datetime="${esc(e.last_seen_at)}">${esc(String(e.last_seen_at || '').slice(0, 10))}</time></dd></div>
@@ -213,7 +218,7 @@ ${preview ? `<figure class="mm-caption-card"><img src="${esc(preview.template.im
 </div>`;
 }
 
-function caption({ caption: c, template, mine = false } = {}) {
+function caption({ caption: c, template, mine = false, share = null } = {}) {
     return `<div class="mm-wrap" id="mm-caption" data-caption="${esc(c.id)}">
 <header class="mm-page-h"><p class="mm-kicker">A saved caption</p><h1>${esc(template ? template.name : 'Caption')}</h1>
 <p class="mm-lede">${mine ? 'Yours. ' : ''}Text over the template image, saved as lines — never as a rendered picture.</p></header>
@@ -222,7 +227,7 @@ ${template ? `<img src="${esc(template.image_url)}" alt="">` : ''}
 <figcaption>${c.lines.map((l) => `<span>${esc(l)}</span>`).join('')}</figcaption>
 </figure>
 <dl class="mm-facts"><div><dt>Saved</dt><dd>${time(c.created_at)}</dd></div><div><dt>Visibility</dt><dd>${esc(c.visibility)}</dd></div><div><dt>Caption</dt><dd><code>${esc(c.id)}</code></dd></div></dl>
-<div class="mm-actions"><a class="mm-btn" href="/make">Make another</a><a class="mm-btn mm-btn-quiet" href="/">Back to the memes</a></div>
+<div class="mm-actions">${share && share.url ? kit.share({ title: template ? template.name : 'Caption', url: share.url, image: (template && template.image_url) || null }) : ''}<a class="mm-btn" href="/make">Make another</a><a class="mm-btn mm-btn-quiet" href="/">Back to the memes</a></div>
 </div>`;
 }
 
