@@ -124,7 +124,7 @@ function home({ trending = [], week = null, counts = {} } = {}) {
     return `<div class="mm-wrap mm-home" id="mm-home">${page}</div>`;
 }
 
-function entry({ e, citations = [], signedIn = false, staff = false, reported = false, problem = null } = {}) {
+function entry({ e, citations = [], signedIn = false, staff = false, reported = false, problem = null, share = null } = {}) {
     const origin = citations.find((c) => c.role === 'origin') || citations[0] || null;
     const uses = citations.filter((c) => c !== origin);
     const examples = citations.filter((c) => c.role === 'example');
@@ -135,6 +135,7 @@ function entry({ e, citations = [], signedIn = false, staff = false, reported = 
 <p class="mm-kicker">${kindLabel(e.kind)} · ${statusBadge(e.status)}${staff ? ' · <span class="mm-staff">staff view</span>' : ''}</p>
 <h1>${esc(e.title)}</h1>
 ${e.summary ? `<p class="mm-summary">${esc(e.summary)}</p>` : ''}
+${share && share.url ? `<p class="mm-entry-share"><button type="button" class="mm-btn" data-ov-share-sheet data-url="${esc(share.url)}" data-title="${esc(e.title)}"${e.summary ? ` data-text="${esc(e.summary)}"` : ''}${share.image ? ` data-image="${esc(share.image)}"` : ''}>Share</button></p>` : ''}
 <dl class="mm-facts">
 <div><dt>First seen</dt><dd><time datetime="${esc(e.first_seen_at)}">${esc(String(e.first_seen_at || '').slice(0, 10))}</time></dd></div>
 <div><dt>Last seen</dt><dd><time datetime="${esc(e.last_seen_at)}">${esc(String(e.last_seen_at || '').slice(0, 10))}</time></dd></div>
@@ -213,7 +214,7 @@ ${preview ? `<figure class="mm-caption-card"><img src="${esc(preview.template.im
 </div>`;
 }
 
-function caption({ caption: c, template, mine = false } = {}) {
+function caption({ caption: c, template, mine = false, share = null } = {}) {
     return `<div class="mm-wrap" id="mm-caption" data-caption="${esc(c.id)}">
 <header class="mm-page-h"><p class="mm-kicker">A saved caption</p><h1>${esc(template ? template.name : 'Caption')}</h1>
 <p class="mm-lede">${mine ? 'Yours. ' : ''}Text over the template image, saved as lines — never as a rendered picture.</p></header>
@@ -222,7 +223,7 @@ ${template ? `<img src="${esc(template.image_url)}" alt="">` : ''}
 <figcaption>${c.lines.map((l) => `<span>${esc(l)}</span>`).join('')}</figcaption>
 </figure>
 <dl class="mm-facts"><div><dt>Saved</dt><dd>${time(c.created_at)}</dd></div><div><dt>Visibility</dt><dd>${esc(c.visibility)}</dd></div><div><dt>Caption</dt><dd><code>${esc(c.id)}</code></dd></div></dl>
-<div class="mm-actions"><a class="mm-btn" href="/make">Make another</a><a class="mm-btn mm-btn-quiet" href="/">Back to the memes</a></div>
+<div class="mm-actions">${share && share.url ? `<button type="button" class="mm-btn" data-ov-share-sheet data-url="${esc(share.url)}" data-title="${esc(template ? template.name : 'Caption')}"${template && template.image_url ? ` data-image="${esc(template.image_url)}"` : ''}>Share</button>` : ''}<a class="mm-btn" href="/make">Make another</a><a class="mm-btn mm-btn-quiet" href="/">Back to the memes</a></div>
 </div>`;
 }
 

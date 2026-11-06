@@ -15,6 +15,7 @@
  */
 const express = require('express');
 const seo = require('openvibe-shared/seo');
+const social = require('openvibe-shared/social');
 const { asyncRouter } = require('./router');
 const { createDiscoveryRoutes, homeJsonLd } = require('./discovery');
 const { sameOrigin } = require('./principal');
@@ -90,7 +91,8 @@ function createPageRoutes(ctx) {
             title: e.title,
             description,
             jsonLd: [jsonLd],
-            body: raw(views.entry({ e, citations, signedIn: Boolean(signedIn(req)), staff, reported: req.query.reported === '1', problem })),
+            body: raw(views.entry({ e, citations, signedIn: Boolean(signedIn(req)), staff, reported: req.query.reported === '1', problem,
+                share: { url: `${base()}/m/${e.slug}`, image: social.url('meme') } })),
         });
     }
     r.get('/m/:slug', (req, res) => entryPage(req, res));
@@ -177,7 +179,7 @@ function createPageRoutes(ctx) {
             cache: c.visibility === 'public' ? PUBLIC_CACHE : null,
             title: template ? `A caption on ${template.name}` : 'A saved caption',
             description: c.lines.join(' / ').slice(0, 160),
-            body: raw(views.caption({ caption: c, template, mine })),
+            body: raw(views.caption({ caption: c, template, mine, share: { url: `${base()}/c/${c.id}` } })),
         });
     });
 

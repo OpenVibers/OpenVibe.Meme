@@ -68,6 +68,11 @@ function jsonLd(html) {
             assert.ok(r.text.includes('the robot is offline again'));
             assert.ok(r.text.includes('the robot is offline for good'));
             assert.ok(r.text.includes('/v/9002?t=120'));
+            // The one Share sheet (openvibe-shared 4.114.0): one button, with the entry's own public address.
+            const share = r.text.match(/<button[^>]*data-ov-share-sheet[^>]*>/g) || [];
+            assert.strictEqual(share.length, 1, 'one Share button: ' + share.join(' | '));
+            assert.ok(share[0].includes('data-url="https://openvibe.meme/m/robot-is-offline"'), share[0]);
+            assert.ok(share[0].includes('data-image="/shared/social/meme.jpg'), share[0]);
         });
 
         await check('one entry page describes itself for search and share cards', async () => {
@@ -143,6 +148,10 @@ function jsonLd(html) {
             assert.ok(r.text.includes('mm-caption-card'));
             assert.ok(r.text.includes('the caption'));
             assert.ok(r.text.includes('on the page'));
+            const share = r.text.match(/<button[^>]*data-ov-share-sheet[^>]*>/g) || [];
+            assert.strictEqual(share.length, 1, 'one Share button: ' + share.join(' | '));
+            assert.ok(share[0].includes(`data-url="https://openvibe.meme/c/${cap.id}"`), share[0]);
+            assert.ok(share[0].includes('data-image="/img/template-'), 'the template is the picture');
             const hidden = (await t.get('/api/v1/captions', { as: alice, json: { template_id: tpl.id, lines: ['hidden one'], visibility: 'hidden' } })).json();
             assert.strictEqual((await t.get(`/c/${hidden.id}`)).status, 404);
             assert.strictEqual((await t.get(`/c/${hidden.id}`, { as: alice })).status, 200);
