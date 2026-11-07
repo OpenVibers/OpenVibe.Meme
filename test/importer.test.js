@@ -51,6 +51,30 @@ const { boot, check, done } = require('./helpers/boot');
             assert.strictEqual(again.created, 0);
             assert.strictEqual(Number(await t.ctx.s.db.value("SELECT COUNT(*)::int AS n FROM meme_entries WHERE slug = 'robot-is-offline'")), 1);
         });
+
+        await check('two ingests of the same phrase make one entry, whatever the case, spaces or punctuation', async () => {
+            const before = await t.ctx.s.db.maybe("SELECT * FROM meme_entries WHERE slug = 'robot-is-offline'");
+            const cite = (id) => ({
+                source_service: 'chat', source_type: 'chat_message', source_id: String(id), chat_message_id: id,
+                quote_text: 'robot is offline', observed_at: '2026-10-24T12:00:00.000Z', url: 'https://openvibe.chat/',
+            });
+            const first = await t.ctx.entries.upsertCandidate({
+                slug: 'robot-is-offline-two', title: '  ROBOT   is offline! ', kind: 'catchphrase',
+                visibility: 'hidden', first_seen_at: '2026-10-24T12:00:00.000Z', last_seen_at: '2026-10-24T12:00:00.000Z',
+                citations: [cite(9999)],
+            });
+            const second = await t.ctx.entries.upsertCandidate({
+                slug: 'robot-is-offline-three', title: 'robot is offline', kind: 'catchphrase',
+                visibility: 'hidden', first_seen_at: '2026-10-25T12:00:00.000Z', last_seen_at: '2026-10-25T12:00:00.000Z',
+                citations: [cite(10000)],
+            });
+            assert.strictEqual(first.created, false);
+            assert.strictEqual(second.created, false);
+            assert.strictEqual(first.entry.id, before.id);
+            assert.strictEqual(second.entry.id, before.id);
+            assert.strictEqual(Number(await t.ctx.s.db.value("SELECT COUNT(*)::int AS n FROM meme_entries WHERE title_key = 'robot is offline'")), 1);
+            assert.strictEqual(Number(await t.ctx.s.db.value("SELECT COUNT(*)::int AS n FROM meme_citations WHERE source_id IN ('9999', '10000')")), 2);
+        });
     } finally {
         await t.close();
     }

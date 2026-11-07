@@ -99,18 +99,15 @@ async function runSeed({ config, s, upstreams, log = console } = {}) {
     const last = citations.reduce((m, c) => (Date.parse(c.observed_at) > Date.parse(m) ? c.observed_at : m), citations[0].observed_at);
     const summary = cleanSummary(TITLE, 'Cozmo, the robot, is not online: a chat line and a stream moment about its Wi-Fi. The robot is offline, again.');
 
-    const existing = await entries.bySlug(SLUG);
-    if (existing) {
-        const enriched = await entries.enrich(existing.id, { first_seen_at: first, last_seen_at: last, cites: citations });
-        const added = enriched && enriched.added ? enriched.added : 0;
-        log.log(`[seed-proof] ${SLUG} already exists (${existing.id}, ${existing.visibility}); ${added} new citation(s) added — left as it is`);
-        return { created: false, entry: existing, citations, added };
-    }
-
-    const out = await entries.createCandidate({
+    const out = await entries.upsertCandidate({
         slug: SLUG, title: TITLE, kind: 'joke', summary, status: 'classic',
         first_seen_at: first, last_seen_at: last, visibility: 'hidden', citations,
     });
+    if (!out.created) {
+        const added = out.added ? out.added : 0;
+        log.log(`[seed-proof] ${SLUG} already exists (${out.entry.id}, ${out.entry.visibility}); ${added} new citation(s) added — left as it is`);
+        return { created: false, entry: out.entry, citations, added };
+    }
     log.log(`[seed-proof] created ${out.entry.id} /${SLUG} (${out.entry.visibility}, ${out.entry.status})`);
     log.log(`[seed-proof] origin: chat message ${msg.id} at ${msg.timestamp} — "${short(msg.message, 90)}"`);
     log.log(`[seed-proof] use:    VOD ${canon.vod_id} @${canon.offset_seconds}s (source part ${SOURCE_VOD} @${SOURCE_SEC}s) — "${short(seg.text, 90)}"`);

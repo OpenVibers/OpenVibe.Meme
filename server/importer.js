@@ -237,18 +237,15 @@ function createImporter({ config, s, entries, upstreams, fetchImpl = globalThis.
                 const lastSeen = cites.reduce((m, c) => (Date.parse(c.observed_at) > Date.parse(m) ? c.observed_at : m), cites[0].observed_at);
                 const title = displayTitle(candidate.phrase);
                 const summary = cleanSummary(title, `"${title}" recurs in ${cites.length} moments across ${new Set(cites.map((c) => utcDay(c.observed_at))).size} days on OpenVibe, from ${firstSeen.slice(0, 10)} to ${lastSeen.slice(0, 10)}.${hints.includes(candidate.phrase) ? ' Chat\'s timeline names it too.' : ''}`);
-                const existing = await entries.bySlug(slugify(title));
-                if (existing) {
-                    const r = await entries.enrich(existing.id, { first_seen_at: firstSeen, last_seen_at: lastSeen, cites });
-                    if (r && r.changed) enriched++;
-                } else {
-                    await entries.createCandidate({
-                        slug: slugify(title), title, kind: candidate.phrase.split(' ').length <= 4 ? 'catchphrase' : 'meme',
-                        summary, status: statusFor(firstSeen, lastSeen, s.now()), first_seen_at: firstSeen, last_seen_at: lastSeen,
-                        visibility: 'hidden', citations: cites,
-                    });
-                    created++;
-                }
+                // One entry per normalised title and kind: a phrase the table already has is enriched, whatever
+                // slug an earlier ingest gave it. A different slug never means a different joke.
+                const r = await entries.upsertCandidate({
+                    slug: slugify(title), title, kind: candidate.phrase.split(' ').length <= 4 ? 'catchphrase' : 'meme',
+                    summary, status: statusFor(firstSeen, lastSeen, s.now()), first_seen_at: firstSeen, last_seen_at: lastSeen,
+                    visibility: 'hidden', citations: cites,
+                });
+                if (r.created) created++;
+                else if (r.changed) enriched++;
             } catch (err) {
                 errors.push(`candidate ${candidate.phrase}: ${err.message}`);
                 log.warn(`[OpenVibe.Meme] importer candidate failed: ${err.message}`);

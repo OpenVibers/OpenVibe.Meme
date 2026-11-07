@@ -45,7 +45,7 @@ async function boot(opts = {}) {
 
     const config = configLib.load(env);
     const { createStore } = require('../../server/db');
-    const testdb = await require('./db').testDb();
+    const testdb = await require('./db').testDb(opts.migrations ? { migrations: opts.migrations } : {});
     const store = createStore(testdb.db, { now: opts.now });
     const built = await createApp({ config, store, log, telemetrySink: opts.telemetrySink, accountSend: opts.accountSend,
         media: opts.media, reddit: opts.reddit, ai: opts.ai, aiClient: opts.aiClient, aiBudget: opts.aiBudget,
@@ -81,7 +81,7 @@ async function boot(opts = {}) {
     }
 
     const t = {
-        base, network, upstreams, ai, config, ctx: built.ctx, get, signIn, dbDump,
+        base, network, upstreams, ai, config, ctx: built.ctx, get, signIn, dbDump, testdb,
         logs: () => captured.join('\n'),
         async close() {
             built.ctx.importer.stop();

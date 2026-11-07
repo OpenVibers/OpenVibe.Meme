@@ -33,6 +33,17 @@ const nOrNull = (v) => (v == null || v === '' ? null : (Number.isFinite(Number(v
 const sha256 = (s) => crypto.createHash('sha256').update(String(s), 'utf8').digest('hex');
 const refusal = (status, code, message, field) => ({ ok: false, status, code, message, ...(field ? { field } : {}) });
 
+/** The same normalisation as migration 0009's meme_title_key(): lowercase, quotes removed, other punctuation as a
+ * space, whitespace collapsed. Two titles that differ only in case, quotes or punctuation have one key. */
+function titleKey(title) {
+    return String(title == null ? '' : title)
+        .toLowerCase()
+        .replace(/['’‘`´]/g, '')
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function wireEntry(row) {
     if (!row) return null;
     return {
@@ -494,6 +505,32 @@ function createStore(s, { search }) {
     async function byId(id, t) {
         return await q(t).maybe('SELECT * FROM meme_entries WHERE id = $1', [String(id || '')]);
     }
+    /** The entry a merged slug or id answers 301 to, or null. */
+    async function redirectFor(value, t) {
+        return await q(t).maybe('SELECT * FROM meme_entry_redirects WHERE from_slug = $1 OR from_entry_id = $1 LIMIT 1', [String(value || '')]);
+    }
+    /** The entry whose title has this key. A public entry wins over a hidden candidate. */
+    async function byTitleKey(title, kind = null, t) {
+        const key = titleKey(title);
+        if (!key) return null;
+        const args = [key];
+        let where = 'title_key = $1';
+        if (kind) { args.push(kind); where += ' AND kind = $2'; }
+        return await q(t).maybe(
+            `SELECT * FROM meme_entries WHERE ${where}
+             ORDER BY CASE visibility WHEN 'public' THEN 0 WHEN 'hidden' THEN 1 ELSE 2 END, created_at ASC, id ASC LIMIT 1`,
+            args,
+        );
+    }
+    /** A different public entry already using this title and kind, if any. */
+    async function publicTitleConflict(kind, title, id, t) {
+        const key = titleKey(title);
+        if (!key) return null;
+        return await q(t).maybe(
+            "SELECT id, slug FROM meme_entries WHERE visibility = 'public' AND kind = $1 AND title_key = $2 AND id <> $3 LIMIT 1",
+            [kind, key, String(id || '')],
+        );
+    }
     async function citations(entryId, t) {
         return (await q(t).many('SELECT * FROM meme_citations WHERE entry_id = $1 ORDER BY observed_at ASC, id ASC', [entryId])).map(wireCitation);
     }
@@ -721,6 +758,30 @@ function createStore(s, { search }) {
         return await createEntry({ ...opts, visibility: opts.visibility || 'hidden' }, t);
     }
 
+    /**
+     * The importer's write: one entry per normalised title and kind. A second ingest of the same phrase adds its
+     * citations to the entry that is already there instead of inserting a row with a different slug. The advisory
+     * lock serialises two ingest processes that both miss the lookup; the entry row itself is not unique while
+     * hidden, so the lock is what stops a duplicate candidate.
+     */
+    async function upsertCandidate(opts, t = null) {
+        const run = async (tx) => {
+            const cleanTitle = String(opts.title || '').replace(/\s+/g, ' ').trim().slice(0, 160) || 'Untitled meme';
+            const cleanKind = KINDS.includes(opts.kind) ? opts.kind : 'meme';
+            await q(tx).exec('SELECT pg_advisory_xact_lock(hashtext($1)::bigint)', [`meme:title:${cleanKind}:${titleKey(cleanTitle)}`]);
+            const existing = await byTitleKey(cleanTitle, cleanKind, tx);
+            if (existing) {
+                const enriched = await enrich(existing.id, {
+                    first_seen_at: opts.first_seen_at, last_seen_at: opts.last_seen_at, cites: opts.citations || [],
+                }, tx);
+                return { ...enriched, created: false };
+            }
+            const created = await createEntry({ ...opts, title: cleanTitle, kind: cleanKind }, tx);
+            return { ...created, created: true };
+        };
+        return t ? await run(t) : await s.tx(run);
+    }
+
     /** Insert citations in the caller's transaction; the sha256 is computed from the verbatim quote. */
     async function addCitations(entryId, cites = [], t = null) {
         const run = async (tx) => {
@@ -749,25 +810,26 @@ function createStore(s, { search }) {
     }
 
     /** Add uses to an existing candidate, extend its range and bump its revision only when something changed. */
-    async function enrich(entryId, { first_seen_at, last_seen_at, cites = [] }) {
-        return await s.tx(async (t) => {
-            const row = await byId(entryId, t);
+    async function enrich(entryId, { first_seen_at, last_seen_at, cites = [] }, t = null) {
+        const run = async (tx) => {
+            const row = await byId(entryId, tx);
             if (!row) return null;
             const first = iso(first_seen_at) || iso(row.first_seen_at);
             const last = iso(last_seen_at) || iso(row.last_seen_at);
-            const added = await addCitations(entryId, cites, t);
+            const added = await addCitations(entryId, cites, tx);
             const earlier = Date.parse(first) < Date.parse(iso(row.first_seen_at));
             const later = Date.parse(last) > Date.parse(iso(row.last_seen_at));
             if (!added.length && !earlier && !later) return { entry: wireEntry(row), added: 0, changed: false };
-            const updated = await t.maybe(
+            const updated = await tx.maybe(
                 `UPDATE meme_entries SET first_seen_at = LEAST(first_seen_at, $2::timestamptz), last_seen_at = GREATEST(last_seen_at, $3::timestamptz),
                    revision = revision + 1, updated_at = now() WHERE id = $1 RETURNING *`,
                 [entryId, first, last],
             );
-            const all = await liveCitations(entryId, t);
-            if (updated.visibility === 'public') await search.sync(t, wireEntry(updated), all);
+            const all = await liveCitations(entryId, tx);
+            if (updated.visibility === 'public') await search.sync(tx, wireEntry(updated), all);
             return { entry: wireEntry(updated), added: added.length, changed: true };
-        });
+        };
+        return t ? await run(t) : await s.tx(run);
     }
 
     /** A citation changed (a redirect, or a use went away) while the entry stayed public: a new revision and document. */
@@ -1031,6 +1093,8 @@ function createStore(s, { search }) {
             const webOrigin = await t.maybe('SELECT entry_id FROM meme_origins WHERE entry_id = $1', [row.id]);
             if (!citationOrigin && !webOrigin) return refusal(409, 'meme.origin_gone', 'The origin citation is missing or gone; this entry cannot be published.');
             if (row.visibility === 'public') return { ok: true, entry: wireEntry(row), unchanged: true };
+            const conflict = await publicTitleConflict(row.kind, row.title, row.id, t);
+            if (conflict) return refusal(409, 'meme.duplicate_title', `Another public entry already has this title and kind (/${conflict.slug}).`);
             const updated = await t.maybe('UPDATE meme_entries SET visibility = $2, revision = revision + 1, updated_at = now() WHERE id = $1 RETURNING *', [row.id, 'public']);
             const all = await liveCitations(row.id, t);
             await search.sync(t, wireEntry(updated), all);
@@ -1056,6 +1120,11 @@ function createStore(s, { search }) {
         return await s.tx(async (t) => {
             const row = await bySlug(slug, t);
             if (!row) return refusal(404, 'meme.not_found', 'No such meme.');
+            if (row.visibility === 'public' && (v.title !== undefined || v.kind !== undefined)) {
+                const conflict = await publicTitleConflict(v.kind === undefined ? row.kind : v.kind,
+                    v.title === undefined ? row.title : v.title, row.id, t);
+                if (conflict) return refusal(409, 'meme.duplicate_title', `Another public entry already has this title and kind (/${conflict.slug}).`);
+            }
             const sets = [];
             const args = [row.id];
             for (const key of ['title', 'kind', 'status']) {
@@ -1196,6 +1265,10 @@ function createStore(s, { search }) {
             const sets = [];
             const args = [entryId];
             const cleanTitle = String(title == null ? '' : title).replace(/\s+/g, ' ').trim().slice(0, 160);
+            if (row.visibility === 'public' && cleanTitle && cleanTitle !== row.title) {
+                const conflict = await publicTitleConflict(row.kind, cleanTitle, row.id, t);
+                if (conflict) return { entry: wireEntry(row), changed: false, conflict: 'meme.duplicate_title' };
+            }
             if (cleanTitle && cleanTitle !== row.title) { args.push(cleanTitle); sets.push(`title = $${args.length}`); }
             const cleanSummary = summary == null ? null : String(summary).replace(/\s+/g, ' ').trim().slice(0, 600);
             if (cleanSummary && cleanSummary !== row.summary) { args.push(cleanSummary); sets.push(`summary = $${args.length}`); }
@@ -1315,9 +1388,9 @@ function createStore(s, { search }) {
     return {
         wireEntry, wireCitation, wireOrigin, wireSpread, wireVariation, wireExample, wireRelated, wireRevision,
         wireTemplate, wireCaption, wireReport, wireJudgement,
-        bySlug, byId, citations, liveCitations, originOf, spreadOf, variationsOf, examplesOf, relatedOf, revisionsOf, detail,
+        bySlug, byId, byTitleKey, redirectFor, citations, liveCitations, originOf, spreadOf, variationsOf, examplesOf, relatedOf, revisionsOf, detail,
         list, trending, week, series, showcase, uniqueSlug,
-        createCandidate, createEntry, addCitations, enrich, reindex, publish, hide, patch,
+        createCandidate, createEntry, upsertCandidate, addCitations, enrich, reindex, publish, hide, patch,
         createProposal, addRevision, reviewRevision, pendingRevisions,
         templates, templateById, addTemplate, createCaption, captionById, captionCountForTemplate,
         castVote, createReport, listOpenReports,
@@ -1338,7 +1411,7 @@ function slugify(title) {
 }
 
 module.exports = {
-    createStore, slugify, patchFields, entryFields, changeDiff, captionLines, windowStart,
+    createStore, slugify, titleKey, patchFields, entryFields, changeDiff, captionLines, windowStart,
     wireEntry, wireCitation, wireOrigin, wireSpread, wireVariation, wireExample, wireRelated, wireRevision,
     wireTemplate, wireCaption, wireReport, SLUG_RE, MEDIA_ID_RE,
     KINDS, STATUSES, VISIBILITIES, SCOPES, LABELS, MODERATION_STATES, BLOCKED_WORDS,
