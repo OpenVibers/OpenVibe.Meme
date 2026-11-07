@@ -658,6 +658,13 @@ function createStore(s, { search }) {
         return { days: n, from: start.toISOString(), to: now.toISOString(), series: out };
     }
 
+    /** The home's first real entry, with the citations and ten-day use series its scenes show. Null when none. */
+    async function showcase(entry) {
+        if (!entry) return null;
+        const [cites, uses] = await Promise.all([citations(entry.id), series(entry.id, { days: 10 })]);
+        return { entry, citations: cites, series: uses };
+    }
+
     /** The id for a slug, appending -2, -3… when one is already taken. */
     async function uniqueSlug(base, t) {
         const root = String(base || 'meme').slice(0, 70).replace(/^-+|-+$/g, '') || 'meme';
@@ -1309,7 +1316,7 @@ function createStore(s, { search }) {
         wireEntry, wireCitation, wireOrigin, wireSpread, wireVariation, wireExample, wireRelated, wireRevision,
         wireTemplate, wireCaption, wireReport, wireJudgement,
         bySlug, byId, citations, liveCitations, originOf, spreadOf, variationsOf, examplesOf, relatedOf, revisionsOf, detail,
-        list, trending, week, series, uniqueSlug,
+        list, trending, week, series, showcase, uniqueSlug,
         createCandidate, createEntry, addCitations, enrich, reindex, publish, hide, patch,
         createProposal, addRevision, reviewRevision, pendingRevisions,
         templates, templateById, addTemplate, createCaption, captionById, captionCountForTemplate,
