@@ -81,7 +81,7 @@ async function boot(opts = {}) {
     }
 
     const t = {
-        base, network, upstreams, ai, config, ctx: built.ctx, get, signIn, dbDump,
+        base, network, upstreams, ai, config, ctx: built.ctx, get, signIn, dbDump, testdb,
         logs: () => captured.join('\n'),
         async close() {
             built.ctx.importer.stop();

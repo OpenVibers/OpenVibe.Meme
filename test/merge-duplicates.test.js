@@ -10,6 +10,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { ids } = require('openvibe-contracts');
+const { createDb } = require('openvibe-sdk/db');
 const { boot, check, done } = require('./helpers/boot');
 const { MIGRATIONS } = require('../server/db');
 
@@ -23,6 +24,14 @@ const ulid = () => ids.ulid();
     const t = await boot({ migrations: beforeDir });
     try {
         const db = t.ctx.s.db;
+        const quiet = { log() {}, warn() {}, error() {}, info() {} };
+        // DDL is the owner's job: on the PostgreSQL test store the app's runtime role may not create functions or
+        // indexes. PGlite has one role, so its handle can apply the migration directly.
+        const applyMigration = async (sql) => {
+            if (!t.testdb.directUrl) return await db.query(sql);
+            const owner = createDb({ url: t.testdb.directUrl, service: 'meme-merge-owner', max: 1, log: quiet });
+            try { await owner.query(sql); } finally { await owner.close(); }
+        };
         const now = new Date().toISOString();
         const cite = (o) => ({ source_service: 'live', source_type: 'rundown_segment', url: 'https://openvibe.video/v/1?t=1', quote_text: 'keep friends close', observed_at: '2026-10-14T13:16:25.000Z', ...o });
 
@@ -77,7 +86,7 @@ const ulid = () => ids.ulid();
 
         await check('0009 merges the public duplicates into the oldest id and moves everything to it', async () => {
             const sql = fs.readFileSync(path.join(MIGRATIONS, '0009_entry_title_key.sql'), 'utf8');
-            await db.query(sql);
+            await applyMigration(sql);
 
             const rows = await db.many("SELECT id, slug, title, kind, revision FROM meme_entries WHERE visibility = 'public' ORDER BY slug");
             assert.strictEqual(rows.length, 2, 'one public entry per title: ' + JSON.stringify(rows));
