@@ -68,11 +68,17 @@ function empty(text, href = '/week', label = 'This week’s ballot') {
 }
 
 /** The room's picture: a meme's family tree growing from its first moment, stickers fanning off the branches. */
-function treeMotif() {
+function treeMotif(feature = null) {
+    const e = feature && feature.entry;
+    const cites = feature && Array.isArray(feature.citations) ? feature.citations : [];
+    const c = cites.find((x) => x.role === 'origin') || cites[0] || null;
+    const at = c ? clock(c.offset_seconds) : null;
+    const root = e ? esc(e.title) : "A meme's first moment";
+    const moment = c ? `${esc(SOURCE_LABEL[c.source_type] || c.source_type)}${at ? ` · ${esc(at)}` : ''}` : 'a cited moment';
     return `<div class="mm-tree" aria-hidden="true">
 <svg class="mm-tree-lines" viewBox="0 0 400 280" preserveAspectRatio="none"><path d="M200 78 C200 128 92 118 92 176"/><path d="M200 78 L200 176"/><path d="M200 78 C200 128 308 118 308 176"/><path d="M92 206 C92 236 52 232 52 258"/><path d="M92 206 C92 236 132 232 132 258"/><path d="M308 206 C308 236 348 232 348 258"/></svg>
-<span class="mm-node mm-node-root"><b>Cozmo is offline</b><small>chat · the first time</small></span>
-<span class="mm-node mm-n1">VOD · 25:41</span><span class="mm-node mm-n2">a clip</span><span class="mm-node mm-n3">the Rundown</span>
+<span class="mm-node mm-node-root"><b>${root}</b><small>${e ? 'the first moment' : 'chat · the first time'}</small></span>
+<span class="mm-node mm-n1">${moment}</span><span class="mm-node mm-n2">a clip</span><span class="mm-node mm-n3">the Rundown</span>
 <span class="mm-sticker mm-s1">classic</span><span class="mm-sticker mm-s2">lol</span><span class="mm-sticker mm-s3">rising</span>
 </div>`;
 }
@@ -126,7 +132,7 @@ function home({ trending = [], week = null, counts = {}, feature = null } = {}) 
             start: { href: '/week', label: 'Vote for meme of the week' },
             chips: [{ label: 'Make a caption', href: '/make' }, ...(trending.length ? [{ label: 'Trending', href: '#mm-trending' }] : []), { label: 'The API', href: '/developers' }],
             proof: Number(counts.entries) ? [{ value: Number(counts.entries), label: Number(counts.entries) === 1 ? 'entry' : 'entries' }] : [],
-            motif: treeMotif(),
+            motif: treeMotif(feature),
         },
         scenes: [
             { title: 'A stream moment becomes an entry', text: 'An entry starts where the joke did: the chat line or the second of the VOD, quoted word for word and linked. A source that disappears is marked, and an entry without its origin goes back into hiding.',

@@ -18,11 +18,12 @@ assert.ok(page.includes('uses per day, last 3 days') && page.includes('Cozmo is 
 assert.ok(page.includes('href="/m/cosmo"'), 'the entry is linked');
 assert.ok(page.includes('Example caption'), 'the caption preview says Example');
 assert.ok(!/but yeah and Cosmo is broken now/.test(page), 'no written-in quote');
+assert.ok(page.includes('Cozmo is offline') && page.includes('VOD · 25:41'), 'the hero tree also uses the real entry');
 
 const empty = views.home({});
 assert.ok(empty.includes('No cited moment yet'), 'no citation: says so');
 assert.ok(empty.includes('No uses cited in the last 10 days'), 'no uses: says so');
-assert.ok(!/but yeah and Cosmo is broken now|\[2, 3, 2, 4, 6, 5, 8, 11, 9, 14\]/.test(empty), 'no written-in quote or series');
+assert.ok(!/but yeah and Cosmo is broken now|\[2, 3, 2, 4, 6, 5, 8, 11, 9, 14\]|Cozmo is offline|25:41/.test(empty), 'no written-in quote, series, entry or timestamp');
 assert.ok(empty.includes('Example caption'), 'the caption preview still says Example');
 
 console.log('meme home: the citation and rise scenes read the first real entry, or say there is none');
