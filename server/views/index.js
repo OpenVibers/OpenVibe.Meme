@@ -5,7 +5,7 @@
  * plain form or link. public/js/meme.js is a one-comment placeholder the main session replaces; the preview and
  * the vote work without it.
  *
- *   home({ trending, week })                       trending, meme of the week, the generator teaser
+ *   home({ trending, week, feature })              trending, meme of the week, the first entry's real origin and uses
  *   entry({ e, citations, signedIn, staff })       the origin with its citation link, the use timeline, examples
  *   week({ out, signedIn })                        this week's candidates and the vote form
  *   make({ templates, values, preview, signedIn }) the caption generator form
@@ -77,7 +77,30 @@ function treeMotif() {
 </div>`;
 }
 
-function home({ trending = [], week = null, counts = {} } = {}) {
+/** The origin scene: the first real entry's own cited moment — quote, source, its second and date, linked. */
+function homeCitation(feature) {
+    const cites = feature && Array.isArray(feature.citations) ? feature.citations : [];
+    const c = cites.find((x) => x.role === 'origin') || cites[0] || null;
+    if (!c) {
+        return `<div class="mm-empty"><p>No cited moment yet.</p><a class="mm-btn mm-btn-quiet" href="/developers">How entries are built</a></div>`;
+    }
+    const at = clock(c.offset_seconds);
+    const when = String(c.observed_at || '').slice(0, 10);
+    return `<blockquote class="mm-cite mm-cite-origin mm-demo-cite"><p class="mm-quote">${esc(c.quote_text)}</p><footer class="mm-cite-foot"><span class="mm-cite-source">${esc(SOURCE_LABEL[c.source_type] || c.source_type)}</span>${at ? ` · at ${esc(at)}` : ''}${when ? ` · ${esc(when)}` : ''} · <a class="mm-cite-link" href="${esc(c.url)}" rel="noopener">the moment</a></footer></blockquote>`;
+}
+
+/** The rise scene: the first real entry's own cited uses per day, scaled to its busiest day in the last ten. */
+function homeRise(feature) {
+    const rows = feature && feature.series && Array.isArray(feature.series.series) ? feature.series.series : [];
+    const max = Math.max(0, ...rows.map((r) => Number(r.uses) || 0));
+    if (!rows.length || max === 0) {
+        return `<div class="mm-empty"><p>No uses cited in the last 10 days.</p><a class="mm-btn mm-btn-quiet" href="/week">This week's ballot</a></div>`;
+    }
+    const bars = rows.map((r) => `<i style="--h:${Math.max(1, Math.round((Number(r.uses) || 0) / max * 14))}" title="${Number(r.uses) || 0} on ${esc(r.day)}"></i>`).join('');
+    return `<div class="mm-demo-rise"><span class="mm-status mm-status-${esc(feature.entry.status)}">${esc(STATUS_LABEL[feature.entry.status] || feature.entry.status)}</span><span class="mm-demo-bars">${bars}</span><small>uses per day, last ${rows.length} days · <a href="/m/${esc(feature.entry.slug)}">${esc(feature.entry.title)}</a></small></div>`;
+}
+
+function home({ trending = [], week = null, counts = {}, feature = null } = {}) {
     const candidates = week ? week.candidates.slice(0, 3) : [];
     // Real first (the owner, 10-31: empty sections made the rooms look unfinished). Trending and the week's teaser show only
     // when they have entries; while neither does, one short "be the first" row sits below the scenes instead.
@@ -107,13 +130,13 @@ function home({ trending = [], week = null, counts = {} } = {}) {
         },
         scenes: [
             { title: 'A stream moment becomes an entry', text: 'An entry starts where the joke did: the chat line or the second of the VOD, quoted word for word and linked. A source that disappears is marked, and an entry without its origin goes back into hiding.',
-                html: `<blockquote class="mm-cite mm-cite-origin mm-demo-cite"><p class="mm-quote">but yeah and Cosmo is broken now</p><footer class="mm-cite-foot"><span class="mm-cite-source">VOD</span> · at 25:41 · Oct 26 · <span class="mm-cite-link">the moment</span></footer></blockquote>`,
-                action: { href: '/developers', label: 'How entries are built' } },
+                html: homeCitation(feature),
+                action: feature ? { href: `/m/${feature.entry.slug}`, label: 'Open the entry' } : { href: '/developers', label: 'How entries are built' } },
             { title: 'Watch a joke rise', text: 'Every use is dated, so you can see a joke catch on, peak and become a classic. Rising first on the trending list.',
-                html: `<div class="mm-demo-rise"><span class="mm-status mm-status-rising">Rising</span><span class="mm-demo-bars">${[2, 3, 2, 4, 6, 5, 8, 11, 9, 14].map((h) => `<i style="--h:${h}"></i>`).join('')}</span><small>uses per day, last 10 days</small></div>`,
+                html: homeRise(feature),
                 action: { href: '/week', label: 'See this week\'s ballot' } },
             { title: 'Caption it', text: 'Pick a template, type up to four lines and see them over the picture. A caption is saved as text, so anyone can remix it.',
-                html: `<figure class="mm-caption-card mm-demo-caption"><img src="/img/template-classic.svg" alt=""><figcaption><span>when the robot is offline</span><span>and chat has to cope</span></figcaption></figure>`,
+                html: `<div><p class="mm-kicker">Example caption</p><figure class="mm-caption-card mm-demo-caption"><img src="/img/template-classic.svg" alt="An example caption on a template"><figcaption><span>when the robot is offline</span><span>and chat has to cope</span></figcaption></figure></div>`,
                 action: { href: '/make', label: 'Open the generator' } },
         ],
         faq: { items: [

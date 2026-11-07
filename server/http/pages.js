@@ -47,12 +47,13 @@ function createPageRoutes(ctx) {
     r.get('/', async (req, res) => {
         const { week } = currentWeek(s.now());
         const [trending, weekOut, c] = await Promise.all([entries.trending({ limit: 8 }), entries.week({ week }), counts()]);
+        const feature = await entries.showcase(trending[0]);
         return page(req, res, {
             index: true, cache: PUBLIC_CACHE, agentLayer: true,
             title: null,
             description: 'The open meme database, rebuilt with AI: every entry cites the moment it happened, follows its later uses, and people vote for meme of the week.',
             jsonLd: homeJsonLd(config),
-            body: raw(views.home({ trending, week: weekOut, counts: c })),
+            body: raw(views.home({ trending, week: weekOut, counts: c, feature })),
         });
     });
 
