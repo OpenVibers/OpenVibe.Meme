@@ -6,6 +6,7 @@
 const { createTestDb, pgAvailable } = require('openvibe-sdk/testing');
 const { MIGRATIONS } = require('../../server/db');
 
-const testDb = ({ store = process.env.MEME_TEST_STORE || 'pglite', max = 4 } = {}) => createTestDb({ migrations: MIGRATIONS, store, service: 'meme', max });
+const testDb = ({ store = process.env.MEME_TEST_STORE || 'pglite', max = 4, migrations = MIGRATIONS } = {}) =>
+    createTestDb({ migrations, store, service: 'meme', max });
 
 module.exports = { testDb, pgAvailable };

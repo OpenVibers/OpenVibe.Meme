@@ -67,6 +67,18 @@ function createApi(ctx) {
     const problem = (res, status, code, detail) => http.sendProblem(res, status, code, { detail, ctx: res.req && res.req.ov });
     const invalid = (res, detail) => problem(res, 400, 'meme.invalid', detail);
 
+    /** A merged slug or id answers 301 to the kept entry; null when there is no entry and no redirect. */
+    async function bySlugOrRedirect(value, req, res, { suffix = '' } = {}) {
+        const row = await entries.bySlug(value);
+        if (row) return row;
+        const redirect = await entries.redirectFor(value);
+        if (!redirect) return null;
+        const target = await entries.byId(redirect.to_entry_id);
+        if (!target || (target.visibility === 'hidden' && !isStaff(req.principal))) return null;
+        res.redirect(301, `/api/v1/entries/${encodeURIComponent(target.slug)}${suffix}`);
+        return undefined;
+    }
+
     function person(req, res) {
         const p = req.principal;
         if (p.kind === 'anonymous') { problem(res, 401, 'meme.sign_in_required', 'Sign in at openvibe.meme, or send a person\'s Network token as a Bearer.'); return null; }
@@ -125,7 +137,8 @@ function createApi(ctx) {
     });
 
     r.get('/entries/:slug/series', async (req, res) => {
-        const row = await entries.bySlug(String(req.params.slug || ''));
+        const row = await bySlugOrRedirect(String(req.params.slug || ''), req, res, { suffix: '/series' });
+        if (row === undefined) return;
         if (!row || (row.visibility === 'hidden' && !isStaff(req.principal))) return problem(res, 404, 'meme.not_found', 'No such meme.');
         const days = req.query.days == null || req.query.days === '' ? 30 : Number.parseInt(req.query.days, 10);
         if (!Number.isFinite(days) || days < 1 || days > 365) return invalid(res, 'days must be a whole number from 1 to 365');
@@ -137,7 +150,8 @@ function createApi(ctx) {
     // GET /entries/:slug — the origin, citations, spread, variations, Media examples, related memes and the
     // approved revision history. A pending proposal is visible to its author and staff only.
     r.get('/entries/:slug', async (req, res) => {
-        const row = await entries.bySlug(String(req.params.slug || ''));
+        const row = await bySlugOrRedirect(String(req.params.slug || ''), req, res);
+        if (row === undefined) return;
         const staff = isStaff(req.principal);
         const mine = Boolean(row && row.submitted_by && req.principal.kind === 'user' && req.principal.subject === row.submitted_by);
         if (!row || (row.visibility === 'hidden' && !staff && !mine)) return problem(res, 404, 'meme.not_found', 'No such meme.');
@@ -156,7 +170,8 @@ function createApi(ctx) {
 
     // GET /entries/:slug/revisions — approved history for anyone; pending/rejected too for staff.
     r.get('/entries/:slug/revisions', async (req, res) => {
-        const row = await entries.bySlug(String(req.params.slug || ''));
+        const row = await bySlugOrRedirect(String(req.params.slug || ''), req, res, { suffix: '/revisions' });
+        if (row === undefined) return;
         const staff = isStaff(req.principal);
         const mine = Boolean(row && row.submitted_by && req.principal.kind === 'user' && req.principal.subject === row.submitted_by);
         if (!row || (row.visibility === 'hidden' && !staff && !mine)) return problem(res, 404, 'meme.not_found', 'No such meme.');
@@ -274,7 +289,8 @@ function createApi(ctx) {
 
     // The full text of a saved deep dive, for the entry page.
     r.get('/entries/:slug/deep-dive', async (req, res) => {
-        const entry = await entries.bySlug(String(req.params.slug || ''));
+        const entry = await bySlugOrRedirect(String(req.params.slug || ''), req, res, { suffix: '/deep-dive' });
+        if (entry === undefined) return;
         if (!entry || entry.visibility !== 'public') return problem(res, 404, 'meme.not_found', 'No such deep dive.');
         const dive = await research.deepDiveFor(entry.id);
         if (!dive) return problem(res, 404, 'meme.not_found', 'No deep dive for that entry.');

@@ -2,6 +2,17 @@
 
 What changed in OpenVibe.Meme, newest first.
 
+## Unreleased
+
+- **One title, one public entry.** `meme_entries.title_key` is the title lowercased with quotes/punctuation stripped
+  and whitespace collapsed; a trigger keeps it current and a partial unique index on `(kind, title_key)` stops two
+  public entries sharing a title. The importer upserts on the key instead of the slug, so a second phrase that the
+  judge titles the same way enriches the entry that exists. Migration 0009 merges the existing public duplicates into
+  the oldest entry, moves their citations, votes, reports, judgements, origins, spread, examples, variations, related
+  rows and revision history, records the merge in the kept entry's history, and turns the old slug and id into 301
+  redirects (`meme_entry_redirects`).
+- **Tests.** Two ingests of one normalised title stay one entry; 0009 moves everything and old addresses 301.
+
 ## 0.1.0 — 2026-10-28
 
 The first version: the open meme database, rebuilt with AI.

@@ -73,8 +73,17 @@ function createPageRoutes(ctx) {
 
     async function entryPage(req, res, { problem = null } = {}) {
         const slug = String(req.params.slug || '');
-        const row = await entries.bySlug(slug);
         const staff = staffViewer(req);
+        const row = await entries.bySlug(slug);
+        if (!row) {
+            // A merged entry's old slug (or id) answers 301 to the entry it was merged into, so an old link lands
+            // on the live page instead of a 404.
+            const redirect = await entries.redirectFor(slug);
+            if (redirect) {
+                const target = await entries.byId(redirect.to_entry_id);
+                if (target && (target.visibility === 'public' || staff)) return res.redirect(301, `/m/${encodeURIComponent(target.slug)}`);
+            }
+        }
         if (!row || (row.visibility === 'hidden' && !staff)) return notFound(req, res);
         const citations = await entries.citations(row.id);
         const e = entries.wireEntry(row);

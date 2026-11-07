@@ -62,7 +62,7 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
 
 | Table | Holds | Migration |
 |---|---|---|
-| `meme_entries` | `mem_` + ULID, unique slug (`/m/<slug>`), title, kind `joke\|catchphrase\|bit\|meme\|saga\|classic\|format\|event\|person\|phrase\|deep_dive`, scope `openvibe\|internet`, AI summary, meaning/usage, L1 `labels`, status + `status_since`, first/last seen, visibility `public\|unlisted\|hidden`, `submitted_by` for a proposal, `revision` (+1 on every change), timestamps, the picture and its licence, the attribution, the Wikidata id | `migrations/0001_initial.sql`, `0002_judge_and_encyclopedia.sql`, `0003_encyclopedia.sql` |
+| `meme_entries` | `mem_` + ULID, unique slug (`/m/<slug>`), title, normalised `title_key` (lowercase, quotes/punctuation stripped, whitespace collapsed; unique per kind for public rows), kind `joke\|catchphrase\|bit\|meme\|saga\|classic\|format\|event\|person\|phrase\|deep_dive`, scope `openvibe\|internet`, AI summary, meaning/usage, L1 `labels`, status + `status_since`, first/last seen, visibility `public\|unlisted\|hidden`, `submitted_by` for a proposal, `revision` (+1 on every change), timestamps, the picture and its licence, the attribution, the Wikidata id | `migrations/0001_initial.sql`, `0002_judge_and_encyclopedia.sql`, `0003_encyclopedia.sql`, `0009_entry_title_key.sql` |
 | `meme_citations` | entry, role `origin\|use\|example`, source service/type/id, stream/VOD/clip/message ids, canonical VOD `offset_seconds`, verbatim `quote_text`, `quote_hash`, canonical `url`, `observed_at`, `source_status` `live\|hidden\|gone`; the open web is a source too (`wikipedia`, `wikidata`, `commons`) | `0001_initial.sql`, `0002_judge_and_encyclopedia.sql` |
 | `meme_judgements` | one row per entry: the score, the reason, the title/summary/origin/spread/examples the AI wrote, whether the text names looks or carries a denied word, the model and the run | `0002_judge_and_encyclopedia.sql` |
 | `meme_status_events` | every status change: from, to, reason, who, when; a judge decision adds `decision`, `from_visibility`, `to_visibility` and `score` | `0001_initial.sql`, `0002_judge_and_encyclopedia.sql` |
@@ -72,6 +72,7 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
 | `meme_examples` | entry, `med_` Media id, caption, source URL — reposted pictures keep their source link | `0003_encyclopedia.sql` |
 | `meme_entry_related` | directed related pairs; the API returns both sides' public entries | `0003_encyclopedia.sql` |
 | `meme_entry_revisions` | entry, revision, author, `change` jsonb, field-by-field `diff`, moderation state `pending\|approved\|rejected`, reviewer and note | `0003_encyclopedia.sql` |
+| `meme_entry_redirects` | a merged entry's old slug/id → the kept entry; both answer 301 | `0009_entry_title_key.sql` |
 | `meme_votes` | (`week` `YYYY-Www`, `subject`) → entry; one vote a week | `0001_initial.sql` |
 | `meme_templates` | id, name, `image_url` (openvibe.media, a local data-free placeholder or a Wikimedia Commons file), `box_count`, source, license, credit, source page, attribution; three placeholders seeded | `0001_initial.sql`, `0002_judge_and_encyclopedia.sql` |
 | `meme_captions` | `mcp_` + ULID, subject, template, `lines` jsonb (1–4 plain-text lines), visibility, created | `0001_initial.sql` |
@@ -283,8 +284,10 @@ The saved caption carries the labels and the `med_…` id. Two calls per request
 A 3–6 word phrase that starts and ends with a content word, appears in at least `MEME_IMPORTER_MIN_USES` uses on at
 least `MEME_IMPORTER_MIN_DAYS` different days, and is not a substring of a stronger phrase becomes one candidate
 (at most `MEME_IMPORTER_MAX_CANDIDATES` per run). Its earliest use is `origin`, the rest are `use`, and the entry
-is inserted `hidden`. Re-running enriches the existing slug with new uses and an extended first/last range; it
-never creates a duplicate and never publishes. Uses naming the deny list are dropped before anything is written.
+is inserted `hidden` with a `title_key` (lowercase, quotes and punctuation stripped, whitespace collapsed). A
+re-run, or a second phrase the judge titles the same way, enriches that one entry for its kind; two public entries
+cannot share the key (the partial unique index), and if duplicates are merged the old slug and id answer 301 to the
+kept entry. The importer never publishes. Uses naming the deny list are dropped before anything is written.
 
 ## Citations and re-verification
 
