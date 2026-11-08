@@ -128,7 +128,7 @@ function home({ trending = [], week = null, counts = {}, feature = null } = {}) 
         room: 'meme',
         hero: {
             title: 'Every joke has a first time',
-            lede: 'The open meme database. Each running joke is written down with the moment it happened, a chat line, a VOD second, a Rundown segment, and every later use. People vote for meme of the week, and anyone can caption a template.',
+            lede: 'The open meme database: each running joke with the moment it started and every later use. Vote for meme of the week, or caption a template.',
             start: { href: '/week', label: 'Vote for meme of the week' },
             chips: [{ label: 'Make a caption', href: '/make' }, ...(trending.length ? [{ label: 'Trending', href: '#mm-trending' }] : []), { label: 'The API', href: '/developers' }],
             proof: Number(counts.entries) ? [{ value: Number(counts.entries), label: Number(counts.entries) === 1 ? 'entry' : 'entries' }] : [],
