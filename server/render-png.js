@@ -108,6 +108,7 @@ function textSvg(layout, lines) {
 }
 
 async function backgroundOf(template, { fetchImpl = globalThis.fetch, timeoutMs = 8000 } = {}) {
+    if (Buffer.isBuffer(template.image_buffer)) return template.image_buffer;
     const url = String(template.image_url || '');
     if (url.startsWith('/img/')) return fs.readFileSync(path.join(PUBLIC_DIR, url.replace(/^\/+/, '')));
     if (/^https?:\/\//i.test(url)) {

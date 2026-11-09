@@ -223,6 +223,23 @@ function createApi(ctx) {
 
     // Render user-supplied lines as PNG with the same licensed template and bundled fonts as the maker.
     // This path is deterministic and does not spend the AI research/generation budget.
+    r.get('/pics/:slug/preview', requirePerson, async (req, res) => {
+        try {
+            const picture = await require('../pics-maker').loadPicture(ctx, req, req.params.slug);
+            return res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options':'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }).type(picture.mime_type).send(picture.buffer);
+        } catch (e) { return problem(res, e.status || 502, 'meme.picture_unavailable', 'This picture is unavailable.'); }
+    });
+    r.post('/pics/:slug/render', requirePerson, express.urlencoded({ extended:false, limit:'8kb' }), async (req, res) => {
+        const checked = captionLines([req.body.top || '', req.body.bottom || '']);
+        if (!checked.ok) return invalid(res, 'Write a caption of at most 120 characters per line.');
+        try {
+            const maker = require('../pics-maker');
+            const picture = await maker.loadPicture(ctx, req, req.params.slug);
+            const rendered = await maker.renderPicture(picture, [String(req.body.top || '').slice(0,120),String(req.body.bottom || '').slice(0,120)]);
+            return res.set({ 'Cache-Control':'private, no-store', 'Content-Disposition':'attachment; filename="openvibe-meme.png"' }).type('png').send(rendered.png);
+        } catch (e) { return problem(res, e.status || 502, 'meme.picture_unavailable', 'This picture could not be rendered.'); }
+    });
+
     r.post('/render', requirePerson, async (req, res) => {
         const body = req.body && typeof req.body === 'object' ? req.body : {};
         const checked = captionLines(body.lines);

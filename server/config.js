@@ -106,6 +106,12 @@ function load(env = process.env) {
             contextLines: Math.max(1, int(env.MEME_JUDGE_CONTEXT_LINES, 6)),
         },
 
+        // OpenVibe.Pics: a picture made into a meme. The public address of the Pics service; the picture itself
+        // is read with the visitor's own token, never with a service one.
+        pics: {
+            url: trim(env.OV_PICS_URL || 'https://openvibe.pics'),
+        },
+
         // OpenVibe.Media for a trend picture or a generated meme (object API v2, namespace `meme`). Off without
         // the internal URL and Network client secret; tests inject a stand-in.
         media: {
