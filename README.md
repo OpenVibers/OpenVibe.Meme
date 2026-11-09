@@ -2,6 +2,9 @@
 
 > The open meme database, rebuilt with AI.
 
+**Live site:** https://openvibe.meme · **API docs:** https://openvibe.services · **For AI:** https://openvibe.meme/llms.txt
+**Run it:** `npm ci && npm run dev` (Node 22 or newer) · **Tests:** `npm test`
+
 **Status:** v1 written and tested (see [STATUS.json](STATUS.json)).
 **Domain:** `openvibe.meme` · **Port:** 5120 · **Service id:** `meme` · **Env prefix:** `MEME`
 **License:** AGPL-3.0-only (same as every OpenVibe service).
