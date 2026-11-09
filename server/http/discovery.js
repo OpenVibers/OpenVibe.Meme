@@ -12,7 +12,7 @@ const cache = require('openvibe-shared/cache-policy');
 const { asyncRouter } = require('./router');
 
 const SITE_NAME = 'OpenVibe.Meme';
-const DESCRIPTION = 'OpenVibe.Meme is the open meme database, rebuilt with AI: every entry cites the moment it happened, follows its later uses, and is voted meme of the week.';
+const DESCRIPTION = 'Explore an open meme encyclopedia: learn what memes mean, trace their origins and variations, and make your own with reusable templates.';
 const DISALLOW = ['/auth/', '/api/', '/internal', '/metrics'];
 
 function dayOf(ts) {
@@ -27,16 +27,17 @@ function homeJsonLd(config) {
     const site = String(config.baseUrl).replace(/\/+$/, '');
     return [
         seo.jsonLd.website({ name: SITE_NAME, url: site, description: DESCRIPTION }),
-        seo.jsonLd.softwareApp({ name: SITE_NAME, url: site, description: DESCRIPTION, category: 'EntertainmentApplication', keywords: 'openvibe meme, meme database, running jokes, meme of the week, caption generator' }),
+        seo.jsonLd.softwareApp({ name: SITE_NAME, url: site, description: DESCRIPTION, category: 'EntertainmentApplication', keywords: 'internet memes, meme encyclopedia, meme origins, meme templates, meme maker' }),
         seo.jsonLd.webPage({ name: SITE_NAME, url: `${site}/`, description: DESCRIPTION, siteUrl: site }),
     ];
 }
 
 function publicPages() {
     return [
-        { path: '/', changefreq: 'daily', priority: 1.0, title: 'OpenVibe.Meme home', text: 'The open meme database: trending entries, meme of the week and the caption generator.' },
+        { path: '/', changefreq: 'daily', priority: 1.0, title: 'OpenVibe.Meme home', text: 'An open meme encyclopedia with researched entries, a weekly favorite, and a caption maker.' },
+        { path: '/browse', changefreq: 'daily', priority: 0.9, title: 'Explore internet memes', text: 'Search an open encyclopedia of internet memes, origins, variations, and reusable templates.' },
         { path: '/week', changefreq: 'daily', priority: 0.9, title: 'Meme of the week', text: 'This week’s candidates and the people’s vote.' },
-        { path: '/make', changefreq: 'weekly', priority: 0.7, title: 'The caption generator', text: 'Pick a template, type up to four lines and preview them over the image.' },
+        { path: '/make', changefreq: 'weekly', priority: 0.7, title: 'Meme maker', text: 'Pick a reusable template, write a caption, preview it, and export a PNG.' },
         { path: '/developers', changefreq: 'weekly', priority: 0.6, title: 'The OpenVibe.Meme API', text: 'The JSON API, the Search document and the importer’s public sources.' },
     ];
 }
@@ -63,13 +64,14 @@ function createDiscoveryRoutes(ctx) {
             // /api/ paths and other sites' links as they are). What an agent may skip is in `optional`, written last.
             markdown: true,
             base: site,
-            summary: 'OpenVibe.Meme is the open meme database, rebuilt with AI. Every public entry cites the moment a running joke happened (a chat line, a VOD second, a Rundown segment), follows its later uses on a timeline, has a status (rising, peaked, classic, dead), and people vote for meme of the week. A caption generator puts plain text lines over a template image.',
-            details: 'GET /api/v1/entries lists public entries; GET /api/v1/entries/:slug adds every citation and the use timeline; GET /api/v1/entries/:slug/series?days=30 is uses per UTC day. GET /api/v1/week lists this ISO week’s candidates and vote counts. The importer reads only public APIs and never publishes: a candidate stays hidden until a staff person publishes it.',
+            summary: 'OpenVibe.Meme is an open encyclopedia of internet memes and a maker attached to each entry. Pages explain a format, cite its origin and spread, connect variations and related memes, and link reusable templates.',
+            details: 'GET /browse searches the server-rendered internet-meme library. GET /api/v1/memes lists public internet memes; GET /api/v1/memes/:slug adds citations and the use timeline. GET /api/v1/templates lists reusable templates, and signed-in POST /api/v1/render returns a PNG. Live references enrich a known meme only when its name appears in a public transcript; stream catchphrases do not become meme entries.',
             sections: [
                 { title: 'Start here', links: [
-                    { title: 'OpenVibe.Meme', url: abs('/'), note: 'trending and meme of the week' },
+                    { title: 'OpenVibe.Meme', url: abs('/'), note: 'internet meme encyclopedia and maker' },
+                    { title: 'Explore memes', url: abs('/browse') },
                     { title: 'The ballot', url: abs('/week') },
-                    { title: 'The caption generator', url: abs('/make') },
+                    { title: 'Meme maker', url: abs('/make') },
                     { title: 'The API', url: abs('/developers') },
                 ] },
                 { title: 'Machine-readable', links: [
@@ -90,7 +92,7 @@ function createDiscoveryRoutes(ctx) {
     });
 
     r.get('/llms-full.txt', async (_req, res) => {
-        const rows = await s.db.many("SELECT slug, title, summary, kind, status FROM meme_entries WHERE visibility = 'public' ORDER BY last_seen_at DESC LIMIT 2000");
+        const rows = await s.db.many("SELECT slug, title, summary, kind, status FROM meme_entries WHERE visibility = 'public' AND scope = 'internet' ORDER BY last_seen_at DESC LIMIT 2000");
         const entries = rows.map((e) => ({ url: `/m/${e.slug}`, title: e.title, text: [e.kind, e.status, e.summary].filter(Boolean).join(' · ') }));
         res.type('text/plain').set('Cache-Control', TEXT).send(seo.llmsFull({
             site: SITE_NAME,
@@ -107,7 +109,7 @@ function createDiscoveryRoutes(ctx) {
     r.get('/sitemap.xml', async (_req, res) => {
         const lastmod = siteUpdated();
         // An entry's licensed picture rides its <url> as an image sitemap entry (SEO-17), so image search can find it.
-        const rows = await s.db.many("SELECT slug, updated_at, image_url FROM meme_entries WHERE visibility = 'public' ORDER BY slug LIMIT 5000");
+        const rows = await s.db.many("SELECT slug, updated_at, image_url FROM meme_entries WHERE visibility = 'public' AND scope = 'internet' ORDER BY slug LIMIT 5000");
         const urls = [
             ...pages.map((e) => ({ loc: abs(e.path), ...(lastmod ? { lastmod } : {}), changefreq: e.changefreq, priority: e.priority })),
             ...rows.map((e) => ({ loc: abs(`/m/${e.slug}`), lastmod: dayOf(e.updated_at) || lastmod, changefreq: 'weekly', priority: 0.7,

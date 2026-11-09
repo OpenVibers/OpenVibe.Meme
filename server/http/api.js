@@ -4,12 +4,14 @@
  * /api/v1 — OpenVibe.Meme's JSON API.
  *
  *   GET    /entries?limit=&cursor=&kind=&status=  public entries, newest first, cursor-paged
- *   GET    /entries/:slug                         one entry with citations and the use timeline
+ *   GET    /memes?scope=internet&q=&sort=top       internet meme library, defaults to internet scope
+ *   GET    /memes/:slug                           one public internet meme with citations and timeline
  *   GET    /entries/:slug/series?days=30          uses per UTC day, zero-filled
  *   GET    /trending                              rising first
  *   GET    /week                                  this ISO week's candidates and vote counts
  *   POST   /week/vote                             one vote a week (signed in, same-origin)
  *   GET    /templates                             caption templates
+ *   POST   /render                                render text lines to PNG without an AI call
  *   POST   /captions                              save a caption (signed in; text only)
  *   GET    /captions/:id                          one saved caption
  *   POST   /entries/:slug/report                  a takedown/correction report (signed in)
@@ -28,7 +30,8 @@ const { asyncRouter } = require('./router');
 const { sameOrigin } = require('./principal');
 const { isStaff } = require('../identity/staff');
 const { currentWeek } = require('../week');
-const { KINDS, STATUSES, SCOPES, LABELS } = require('../store');
+const { KINDS, STATUSES, SCOPES, LABELS, captionLines } = require('../store');
+const { renderMeme } = require('../render-png');
 
 function createApi(ctx) {
     const { config, s, principal, entries, trends, analyzer, research, generator } = ctx;
@@ -104,14 +107,14 @@ function createApi(ctx) {
     // GET /entries?scope=&q=&status=&label=&kind=&sort=newest|top&window=day|week|month|all&channel=
     // `scope=openvibe` is Live's "Memes" page: `sort=top&window=week&channel=<stream_id>` gives the top this week,
     // `sort=newest` the newest; `label` and `q` search the encyclopedia.
-    r.get('/entries', async (req, res) => {
+    r.get(['/entries', '/memes'], async (req, res) => {
         const limit = req.query.limit == null || req.query.limit === '' ? 20 : Number.parseInt(req.query.limit, 10);
         if (!Number.isFinite(limit) || limit < 1) return invalid(res, 'limit must be from 1 to 50');
         const kind = typeof req.query.kind === 'string' && req.query.kind ? req.query.kind : null;
         if (kind && !KINDS.includes(kind)) return invalid(res, `kind must be one of ${KINDS.join(', ')}`);
         const status = typeof req.query.status === 'string' && req.query.status ? req.query.status : null;
         if (status && !STATUSES.includes(status)) return invalid(res, `status must be one of ${STATUSES.join(', ')}`);
-        const scope = typeof req.query.scope === 'string' && req.query.scope ? req.query.scope : null;
+        const scope = typeof req.query.scope === 'string' && req.query.scope ? req.query.scope : (req.path === '/memes' ? 'internet' : null);
         if (scope && !SCOPES.includes(scope)) return invalid(res, `scope must be one of ${SCOPES.join(', ')}`);
         const label = typeof req.query.label === 'string' && req.query.label ? req.query.label.toLowerCase() : null;
         if (label && !LABELS.includes(label)) return invalid(res, `label must be one of ${LABELS.join(', ')}`);
@@ -136,9 +139,10 @@ function createApi(ctx) {
         return res.json({ count: checkout.entries.length, entries: checkout.entries, next_cursor: checkout.next_cursor });
     });
 
-    r.get('/entries/:slug/series', async (req, res) => {
+    r.get(['/entries/:slug/series', '/memes/:slug/series'], async (req, res) => {
         const row = await bySlugOrRedirect(String(req.params.slug || ''), req, res, { suffix: '/series' });
         if (row === undefined) return;
+        if (req.path.startsWith('/memes/') && row && row.scope !== 'internet') return problem(res, 404, 'meme.not_found', 'No such internet meme.');
         if (!row || (row.visibility === 'hidden' && !isStaff(req.principal))) return problem(res, 404, 'meme.not_found', 'No such meme.');
         const days = req.query.days == null || req.query.days === '' ? 30 : Number.parseInt(req.query.days, 10);
         if (!Number.isFinite(days) || days < 1 || days > 365) return invalid(res, 'days must be a whole number from 1 to 365');
@@ -149,9 +153,10 @@ function createApi(ctx) {
 
     // GET /entries/:slug — the origin, citations, spread, variations, Media examples, related memes and the
     // approved revision history. A pending proposal is visible to its author and staff only.
-    r.get('/entries/:slug', async (req, res) => {
+    r.get(['/entries/:slug', '/memes/:slug'], async (req, res) => {
         const row = await bySlugOrRedirect(String(req.params.slug || ''), req, res);
         if (row === undefined) return;
+        if (req.path.startsWith('/memes/') && row && row.scope !== 'internet') return problem(res, 404, 'meme.not_found', 'No such internet meme.');
         const staff = isStaff(req.principal);
         const mine = Boolean(row && row.submitted_by && req.principal.kind === 'user' && req.principal.subject === row.submitted_by);
         if (!row || (row.visibility === 'hidden' && !staff && !mine)) return problem(res, 404, 'meme.not_found', 'No such meme.');
@@ -214,6 +219,25 @@ function createApi(ctx) {
         const counted = await Promise.all(list.map(async (t) => ({ ...t, captions: await entries.captionCountForTemplate(t.id) })));
         res.set('Cache-Control', 'public, max-age=300');
         return res.json({ count: counted.length, templates: counted });
+    });
+
+    // Render user-supplied lines as PNG with the same licensed template and bundled fonts as the maker.
+    // This path is deterministic and does not spend the AI research/generation budget.
+    r.post('/render', requirePerson, async (req, res) => {
+        const body = req.body && typeof req.body === 'object' ? req.body : {};
+        const checked = captionLines(body.lines);
+        if (!checked.ok) return problem(res, checked.status || 400, checked.code || 'meme.invalid', checked.message || 'Invalid caption lines.');
+        const templateId = typeof body.template_id === 'string' ? body.template_id.trim() : '';
+        if (!templateId || templateId.length > 80) return invalid(res, 'template_id is required and must be at most 80 characters');
+        const template = await entries.templateById(templateId);
+        if (!template) return problem(res, 404, 'meme.template_not_found', 'No such template.');
+        try {
+            const rendered = await renderMeme({ template, lines: checked.lines, maxPixels: 1600 });
+            res.set({ 'Cache-Control': 'private, no-store', 'X-Image-Width': String(rendered.width), 'X-Image-Height': String(rendered.height) });
+            return res.type('png').send(rendered.png);
+        } catch (err) {
+            return problem(res, 422, 'meme.render_failed', 'This template could not be rendered right now.');
+        }
     });
 
     r.get('/captions/:id', async (req, res) => {

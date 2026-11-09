@@ -6,9 +6,11 @@
 **Domain:** `openvibe.meme` · **Port:** 5120 · **Service id:** `meme` · **Env prefix:** `MEME`
 **License:** AGPL-3.0-only (same as every OpenVibe service).
 
-OpenVibe.Meme turns OpenVibe's own running jokes into entries with a citation to the moment each one happened —
-a chat line, a VOD second, a Rundown segment — a timeline of later uses, a status (`rising`, `peaked`, `classic`,
-`dead`), a weekly vote and a caption generator on templates. Every public entry is also a Search Fabric document.
+OpenVibe.Meme is an open encyclopedia of internet memes and a maker attached to each entry. Pages explain the format,
+cite its origin and spread, connect its variations and related memes, and link to licensed templates. Members can
+make editable captions and submit examples for moderation. Known memes may show an OpenVibe.Live appearance when a
+transcript names that meme; OpenVibe-only catchphrase pages redirect to the homepage. Every public entry is also a
+Search Fabric document.
 
 ## Purpose
 
@@ -16,9 +18,9 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
   the URL is canonical (OpenVibe.Video's `?t=` redirect is followed, e.g. `/v/6026?t=864` → `/v/6025?t=1541`),
   and `quote_hash` is its sha256. A summary is stored as written (L24 has no looks filter); only an empty summary
   falls back to the title. Verbatim quotes are never rewritten.
-- **Candidates stay hidden.** `server/importer.js` reads public Chat/Live APIs only, finds a 3–6 word phrase used at
-  least twice on two different days, attaches citations and inserts the entry `hidden`. It never publishes. A staff
-  person (Network role `global_mod` or above) publishes it with `POST /api/v1/entries/:slug/publish`.
+- **Live references stay attached to known memes.** `server/importer.js` reads public Chat/Live history and
+  transcripts, then attaches a dated use citation only when the text names an existing public internet-meme entry.
+  It never creates a meme from a stream catchphrase; the Chat global timeline is a paraphrase and is not used as a source.
 - **A judge writes the entry.** `server/ai/judge.js` asks OpenVibe.AI to score each candidate from its own
   citations — with the chat lines and transcript lines around each quote — and to write the entry from that material
   only: a title in natural case, a short summary, where it started, how people use it and two or three example uses.
@@ -33,8 +35,8 @@ a chat line, a VOD second, a Rundown segment — a timeline of later uses, a sta
 - **The citation is checked again.** A daily job reads every public citation URL; a 404/410 marks it `gone`, a
   401/403 marks it `hidden`, and an entry whose origin is gone is hidden (revision +1, Search tombstone).
 - **Meme of the week.** People vote once per ISO week; a second vote changes the choice, never adds a ballot.
-- **The encyclopedia (M2).** An entry has a `scope` (`openvibe` for today's running jokes, `internet` for the
-  encyclopedia), an origin with a public citation, spread points (date, place, URL, count), named variations,
+- **The encyclopedia (M2).** An entry has a `scope` (`openvibe` for legacy OpenVibe-only phrases, which no longer
+  have public meme pages, `internet` for the encyclopedia), an origin with a public citation, spread points (date, place, URL, count), named variations,
   Media examples, meaning and usage, L1 labels (`nudity`, `language`, `graphic`, `18+`, `flashing`, `spoilers`),
   related memes and a moderated revision history. A signed-in person proposes an entry or an edit; it stays
   pending, and staff approve or reject it. Every public entry is still one Search Fabric document, now with
@@ -142,6 +144,8 @@ also gets per-actor minute/hour limits (`MEME_LIMITS_MINUTE`, `MEME_LIMITS_HOUR`
 | Route | What it does |
 |---|---|
 | `GET /entries?scope=&q=&status=&label=&kind=&sort=&window=&channel=&limit=&cursor=` | public entries; `scope=openvibe\|internet`; `q` matches title/summary/meaning/usage/slug; `label` is one L1 label; `sort=top&window=day\|week\|month` ranks by live uses (a cursor only on `newest`); `channel=<stream_id>` is Live's per-channel Memes block; `Cache-Control: public, max-age=60` |
+| `GET /memes?scope=internet&q=&sort=top&window=week` | internet-only meme-library alias; defaults to `scope=internet` |
+| `GET /memes/:slug` | one public internet meme with origin, spread, variations, examples, related memes, and revisions |
 | `GET /entries/:slug` | one entry with `origin` (a citation, or the web origin), `web_origin`, citations, `timeline`, `examples`, `spread`, `variations`, `related` and approved `revisions`, and the judge's `notes` (where it started, how people use it, the examples); a hidden proposal is 404 unless its author or staff |
 | `GET /entries/:slug/revisions` | the approved revision history; staff also see pending and rejected ones |
 | `GET /entries/:slug/series?days=30` | uses per UTC day, zero-filled, 1–365 days |
@@ -158,6 +162,7 @@ also gets per-actor minute/hour limits (`MEME_LIMITS_MINUTE`, `MEME_LIMITS_HOUR`
 | `GET /week` | this ISO week's candidates (public entries with a live use that week) and their vote counts |
 | `POST /week/vote` | signed in, same-origin; `{ entry_id }`; upsert per (`week`, subject) — one vote a week |
 | `GET /templates` | the caption templates with their caption counts and `layout` |
+| `POST /render` | signed in; `{ template_id, lines }` returns a PNG from the local renderer without an AI call |
 | `POST /generate` | signed in; `{ template_slug \| topic, lines? }`; researches current uses, writes captions, renders the template's layout as a PNG, stores it in Media and saves the caption. 201 returns `media_id`, `media_url`, `captions`, `template`, `labels`, `caption`; 503 `meme.ai_unavailable`/`meme.media_unavailable`; 429 `meme.ai_budget` |
 | `POST /captions` | signed in; `{ template_id, lines, visibility? }`, 1–4 lines × 120 chars, blocked words refused |
 | `GET /captions/:id` | one caption; a public read never returns the author's subject |
@@ -272,22 +277,17 @@ The saved caption carries the labels and the `med_…` id. Two calls per request
 ## The importer
 
 `server/importer.js` runs every 30 minutes (`MEME_IMPORTER_INTERVAL_MS`), off under `MEME_DRILL`; tests call
-`runOnce()`. It reads:
+`runOnce()`. It reads public sources only:
 
 1. **Chat global history** — verbatim lines with ids and timestamps, each a usable citation.
-2. **Chat global timeline** — a model paraphrase with no message id, so it is a discovery hint only; it never
-   becomes a citation.
-3. **Rundown topics and segments** — every quote is verbatim speech with `vod_id` and a VOD second, with `said_at`.
-4. **VOD transcripts** — a segment is used only when the public VOD row gives a date; source part ids are
+2. **Rundown topics and segments** — every quote is verbatim speech with `vod_id` and a VOD second, with `said_at`.
+3. **VOD transcripts** — a segment is used only when the public VOD row gives a date; source part ids are
    canonicalised through OpenVibe.Video before a citation is stored.
 
-A 3–6 word phrase that starts and ends with a content word, appears in at least `MEME_IMPORTER_MIN_USES` uses on at
-least `MEME_IMPORTER_MIN_DAYS` different days, and is not a substring of a stronger phrase becomes one candidate
-(at most `MEME_IMPORTER_MAX_CANDIDATES` per run). Its earliest use is `origin`, the rest are `use`, and the entry
-is inserted `hidden` with a `title_key` (lowercase, quotes and punctuation stripped, whitespace collapsed). A
-re-run, or a second phrase the judge titles the same way, enriches that one entry for its kind; two public entries
-cannot share the key (the partial unique index), and if duplicates are merged the old slug and id answer 301 to the
-kept entry. The importer never publishes. Uses naming the deny list are dropped before anything is written.
+The linker matches a transcript against public internet-meme titles, attaches matched moments as `use` citations,
+and extends the entry's first/last-use range. It does not create entries or rewrite the researched origin. The
+source URL remains canonical, uses naming the deny list are dropped, and repeated reads are deduplicated by the
+citation store. `MEME_IMPORTER_MAX_KNOWN_MEMES` limits how many public entries are checked per run.
 
 ## Citations and re-verification
 
@@ -321,6 +321,8 @@ signed-in person is `private, no-store`.
 | Page | What it is |
 |---|---|
 | `/` | trending, meme of the week, the generator teaser |
+| `/browse` | searchable public encyclopedia with collection, type, and usage filters (`/search` alias) |
+| `/memes` | permanent redirect to the internet-meme collection |
 | `/m/:slug` | one entry: origin with its citation link, the use timeline, examples, and a report form when signed in |
 | `/week` | the ballot (`POST /week/vote`) |
 | `/make` | the generator form: template, 1–4 lines, a server-rendered preview (`GET /make`), save (`POST /make` → 303 `/c/:id`) |
@@ -328,8 +330,8 @@ signed-in person is `private, no-store`.
 | `/developers` | the API, the Search document, the importer's sources |
 | 404 | the not-found page |
 
-`public/css/meme.css` and `public/js/meme.js` are one-comment placeholder files: the pages are complete without
-them, and the main session designs them. The templates' images are local data-free SVG placeholders (or an
+The pages remain server-rendered and readable without JavaScript; `public/js/meme.js` makes the caption preview
+update as the user types. The templates' images are local data-free SVG placeholders (or an
 `openvibe.media` object when staff add a real one). `robots.txt`, `sitemap.xml`, `llms.txt` and `llms-full.txt` list
 the public pages and every public entry.
 

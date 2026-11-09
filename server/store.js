@@ -647,6 +647,15 @@ function createStore(s, { search }) {
         return rows.map(wireEntry);
     }
 
+    /** Public internet memes only, for matching named memes in Live transcripts without inventing new entries. */
+    async function internetEntries({ limit = 1000 } = {}) {
+        const n = Math.min(5000, Math.max(1, Number(limit) || 1000));
+        const rows = await db.many(
+            `SELECT * FROM meme_entries WHERE visibility = 'public' AND scope = 'internet'
+             ORDER BY title_key ASC, id ASC LIMIT $1`, [n]);
+        return rows.map(wireEntry);
+    }
+
     /** The current week's candidates (public entries with a live use that week) and their ballot counts. */
     async function week({ week: label, subject = null } = {}) {
         const bounds = weekBounds(label);
@@ -657,6 +666,7 @@ function createStore(s, { search }) {
                     (SELECT COUNT(*)::int FROM meme_votes v WHERE v.week = $1 AND v.entry_id = e.id AND v.subject = $2) AS mine
              FROM meme_entries e
              WHERE e.visibility = 'public'
+               AND e.scope = 'internet'
                AND EXISTS (SELECT 1 FROM meme_citations c
                            WHERE c.entry_id = e.id AND c.source_status = 'live'
                              AND c.observed_at >= $3::timestamptz AND c.observed_at < $4::timestamptz)
@@ -719,7 +729,7 @@ function createStore(s, { search }) {
      * encyclopedia entry ('classic') is inserted public. Citations that name the deny list are dropped here too.
      */
     async function createEntry({
-        slug = null, title, kind = 'meme', summary = null, status = 'rising', first_seen_at, last_seen_at,
+        slug = null, title, kind = 'meme', scope = 'openvibe', summary = null, status = 'rising', first_seen_at, last_seen_at,
         visibility = 'hidden', citations: cites = [], image_url = null, image_credit = null, image_license = null,
         image_license_url = null, image_source_url = null, attribution = null, external_id = null,
     }, t = null) {
@@ -732,11 +742,11 @@ function createStore(s, { search }) {
             let last = iso(last_seen_at) || first;
             if (Date.parse(first) > Date.parse(last)) { const swap = first; first = last; last = swap; }
             const row = await q(tx).maybe(
-                `INSERT INTO meme_entries (id, slug, title, kind, summary, status, status_since, first_seen_at, last_seen_at, visibility, revision, created_at, updated_at,
+                `INSERT INTO meme_entries (id, slug, title, kind, scope, summary, status, status_since, first_seen_at, last_seen_at, visibility, revision, created_at, updated_at,
                     image_url, image_credit, image_license, image_license_url, image_source_url, attribution, external_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8::timestamptz, $9::timestamptz, $10, 1, now(), now(),
-                    $11, $12, $13, $14, $15, $16, $17) RETURNING *`,
-                [id, cleanSlug, cleanTitle, cleanKind, cleanSummary(cleanTitle, summary), status, iso(last), first, last, visibility,
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $9::timestamptz, $10::timestamptz, $11, 1, now(), now(),
+                    $12, $13, $14, $15, $16, $17, $18) RETURNING *`,
+                [id, cleanSlug, cleanTitle, cleanKind, scope, cleanSummary(cleanTitle, summary), status, iso(last), first, last, visibility,
                     image_url || null, image_credit || null, image_license || null, image_license_url || null, image_source_url || null,
                     attribution || null, external_id || null],
             );
@@ -744,7 +754,7 @@ function createStore(s, { search }) {
             await q(tx).exec(
                 `INSERT INTO meme_entry_revisions (entry_id, revision, author, base_revision, change, diff, moderation_state, created_at, reviewed_at, reviewed_by)
                  VALUES ($1, 1, 'service:meme', NULL, $2::jsonb, '[]'::jsonb, 'approved', now(), now(), 'service:meme') ON CONFLICT DO NOTHING`,
-                [row.id, JSON.stringify({ title: cleanTitle, kind, summary: row.summary, status, scope: 'openvibe', labels: [] })],
+                [row.id, JSON.stringify({ title: cleanTitle, kind, summary: row.summary, status, scope, labels: [] })],
             );
             const entry = wireEntry(row);
             if (entry.visibility === 'public') await search.sync(tx, entry, added);
@@ -1389,7 +1399,7 @@ function createStore(s, { search }) {
         wireEntry, wireCitation, wireOrigin, wireSpread, wireVariation, wireExample, wireRelated, wireRevision,
         wireTemplate, wireCaption, wireReport, wireJudgement,
         bySlug, byId, byTitleKey, redirectFor, citations, liveCitations, originOf, spreadOf, variationsOf, examplesOf, relatedOf, revisionsOf, detail,
-        list, trending, week, series, showcase, uniqueSlug,
+        list, trending, internetEntries, week, series, showcase, uniqueSlug,
         createCandidate, createEntry, upsertCandidate, addCitations, enrich, reindex, publish, hide, patch,
         createProposal, addRevision, reviewRevision, pendingRevisions,
         templates, templateById, addTemplate, createCaption, captionById, captionCountForTemplate,

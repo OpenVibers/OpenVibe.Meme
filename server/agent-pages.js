@@ -15,19 +15,19 @@ function createAgentPages(ctx) {
     const page = (path, o) => ({ html: renderPage({ viewer: { kind: 'anonymous' }, config, path, agentLayer: true, ...o }), title: o.title });
 
     async function counts() {
-        const rows = await s.db.many("SELECT COUNT(*)::int AS entries, (SELECT COUNT(*)::int FROM meme_citations c JOIN meme_entries e ON e.id = c.entry_id WHERE e.visibility = 'public') AS citations FROM meme_entries WHERE visibility = 'public'");
+        const rows = await s.db.many("SELECT COUNT(*)::int AS entries, (SELECT COUNT(*)::int FROM meme_citations c JOIN meme_entries e ON e.id = c.entry_id WHERE e.visibility = 'public' AND e.scope = 'internet') AS citations FROM meme_entries WHERE visibility = 'public' AND scope = 'internet'");
         return rows[0] || { entries: 0, citations: 0 };
     }
 
     async function home() {
         const { week } = currentWeek(s.now());
-        const [trending, weekOut, c] = await Promise.all([entries.trending({ limit: 8 }), entries.week({ week }), counts()]);
-        const feature = await entries.showcase(trending[0]);
+        const [trendResult, weekOut, c] = await Promise.all([entries.list({ limit: 8, scope: 'internet', sort: 'top', window: 'week' }), entries.week({ week }), counts()]);
+        const trending = trendResult.entries || [];
         return page('/', {
             index: true, title: null,
-            description: 'The open meme database, rebuilt with AI: every entry cites the moment it happened, follows its later uses, and people vote for meme of the week.',
+            description: 'Explore an open meme encyclopedia: learn what memes mean, trace their origins and variations, and make your own with reusable templates.',
             jsonLd: homeJsonLd(config),
-            body: raw(views.home({ trending, week: weekOut, counts: c, feature })),
+            body: raw(views.home({ trending, week: weekOut, counts: c })),
         });
     }
 
@@ -39,8 +39,8 @@ function createAgentPages(ctx) {
         const previewLines = [1, 2, 3, 4].map((i) => String(values[`line${i}`] || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
         const preview = chosen && previewLines.length ? { template: chosen, lines: previewLines } : null;
         return page('/make', {
-            index: true, title: 'Make a caption',
-            description: 'Pick a template, type up to four lines and preview them over the image before saving.',
+            index: true, title: 'Make a meme',
+            description: 'Choose a reusable meme template, write a caption, preview as you type, and save an editable link or export a PNG.',
             body: raw(views.make({ templates, values: { ...values, template_id: chosen ? chosen.id : '' }, preview, signedIn: false, problem: null })),
         });
     }
@@ -49,6 +49,16 @@ function createAgentPages(ctx) {
         const p = String(rawPath || '/').replace(/\/+$/, '') || '/';
         const q = query instanceof URLSearchParams ? query : new URLSearchParams();
         if (p === '/') return home();
+        if (p === '/browse' || p === '/search') {
+            const filters = { q: String(q.get('q') || '').trim().slice(0, 120), scope: q.get('scope') === 'internet' ? 'internet' : null,
+                kind: ['classic', 'format', 'meme'].includes(q.get('kind')) ? q.get('kind') : null, sort: q.get('sort') === 'top' ? 'top' : 'newest' };
+            const result = await entries.list({ ...filters, limit: 50 });
+            const title = filters.q ? `Search: ${filters.q}` : 'Explore internet memes';
+            return page('/browse', { index: !filters.q && !result.error, title,
+                description: 'Search an open meme encyclopedia with researched origins, spread, variations, and reusable templates.',
+                jsonLd: [seo.jsonLd.webPage({ name: title, url: `${base()}/browse`, description: 'Explore researched internet memes and formats.', siteUrl: base() })],
+                body: raw(views.browse({ entries: result.error ? [] : result.entries, filters, error: result.error || null })) });
+        }
         if (p === '/week') {
             const { week } = currentWeek(s.now());
             const out = await entries.week({ week });
@@ -72,7 +82,7 @@ function createAgentPages(ctx) {
             let slug;
             try { slug = decodeURIComponent(entryMatch[1]); } catch { return null; }
             const row = await entries.bySlug(slug);
-            if (!row || row.visibility !== 'public') return null;
+            if (!row || row.visibility !== 'public' || row.scope !== 'internet') return null;
             const citations = await entries.citations(row.id);
             const e = entries.wireEntry(row);
             return page(p, {

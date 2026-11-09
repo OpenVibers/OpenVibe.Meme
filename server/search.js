@@ -43,7 +43,9 @@ function provenanceOf(citations) {
 /** One entry + its live citations + its internet origin → the Search document (or a tombstone). */
 function documentOf(entry, citations = [], { baseUrl = 'https://openvibe.meme', origin = null } = {}) {
     const revision = Math.max(1, Number(entry.revision) || 1);
-    if (!entry || entry.visibility !== 'public') return { owner: OWNER, type: TYPE, id: entry.id, revision, deleted: true };
+    if (!entry || entry.visibility !== 'public' || (entry.scope || 'openvibe') !== 'internet') {
+        return { owner: OWNER, type: TYPE, id: entry && entry.id, revision, deleted: true };
+    }
     const live = (citations || []).filter((c) => c.source_status === 'live');
     const sources = [...new Set(live.map((c) => c.source_service))];
     // The snippet reads the summary and the body together: the body leaves out the title and summary.

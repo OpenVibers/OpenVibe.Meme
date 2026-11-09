@@ -1,19 +1,17 @@
 'use strict';
 
 /**
- * The candidate importer (v1). It reads only public APIs — OpenVibe.Live's Rundown and VOD transcripts, and
- * OpenVibe.Chat's global timeline and history — and proposes a candidate entry when the same 3–6 word phrase
- * appears in at least two uses on at least two different days. A candidate is inserted hidden, with one citation
- * per use; it never publishes. Staff publish it through POST /api/v1/entries/:slug/publish.
+ * The Live reference linker reads only public APIs — OpenVibe.Live's Rundown and VOD transcripts, and
+ * OpenVibe.Chat's public history — and attaches a use citation only when a transcript explicitly names an existing
+ * public internet-meme entry. It never creates a meme entry from stream speech. The Chat global timeline is a
+ * paraphrase and is never treated as a citation.
  *
  * The job runs every 30 minutes (MEME_IMPORTER_INTERVAL_MS) and is off under MEME_DRILL; tests call runOnce().
- * A failing upstream is logged and skipped: Chat down still lets the Rundown produce candidates, and vice versa.
- * A phrase already in the table is enriched (new citations, an extended first/last range) rather than copied.
+ * A failing upstream is logged and skipped: Chat down still lets the Rundown produce references, and vice versa.
+ * A repeated reference is deduplicated by the citation store, and updates the entry's last-seen range.
  */
 const { parseApiTime } = require('./upstreams');
 const { isDenied } = require('./deny-list');
-const { cleanSummary } = require('./text/no-looks');
-const { slugify } = require('./store');
 
 const MIN_WORDS = 3;
 const MAX_WORDS = 6;
@@ -115,11 +113,9 @@ function createImporter({ config, s, entries, upstreams, fetchImpl = globalThis.
     async function collect() {
         const errors = [];
         const uses = [];
-        const hints = [];
         const canon = resolver();
 
-        // Chat: the history is verbatim; the timeline is a model paraphrase, so it is a discovery hint only and
-        // never becomes a citation (there is no message id in it — research §2.1).
+        // Chat history is verbatim. The global timeline is a paraphrase and is deliberately not a source for meme matches.
         try {
             const history = await upstreams.chatHistory({ limit: 200 });
             for (const m of history.messages) {
@@ -134,11 +130,6 @@ function createImporter({ config, s, entries, upstreams, fetchImpl = globalThis.
                 });
             }
         } catch (err) { errors.push(`chat history: ${err.message}`); log.warn(`[OpenVibe.Meme] importer: ${err.message}`); }
-
-        try {
-            const timeline = await upstreams.chatTimeline({ limit: 60 });
-            for (const e of timeline.events) hints.push(normalize(`${e.label || ''} ${e.detail || ''}`));
-        } catch (err) { errors.push(`chat timeline: ${err.message}`); log.warn(`[OpenVibe.Meme] importer: ${err.message}`); }
 
         // Rundown: every quote is verbatim speech with a VOD second already converted to VOD time.
         const vods = new Set();
@@ -192,11 +183,11 @@ function createImporter({ config, s, entries, upstreams, fetchImpl = globalThis.
             }
         } catch (err) { errors.push(`transcripts: ${err.message}`); log.warn(`[OpenVibe.Meme] importer: ${err.message}`); }
 
-        return { uses, hints: hints.join(' '), errors };
+        return { uses, errors };
     }
 
     /** Canonicalise a candidate's citations (the joined-VOD redirect) and drop what is gone/denied. */
-    async function materialize(candidate, canon) {
+    async function materialize(candidate, canon, { origin = true } = {}) {
         const picked = [...candidate.uses]
             .sort((a, b) => Date.parse(a.observed_at) - Date.parse(b.observed_at) || (a.source_type < b.source_type ? -1 : 1))
             .slice(0, MAX_USES_PER_PHRASE);
@@ -214,53 +205,45 @@ function createImporter({ config, s, entries, upstreams, fetchImpl = globalThis.
                 }
             }
             if (isDenied(c)) continue;
-            out.push({ ...c, role: out.length === 0 ? 'origin' : 'use' });
+            out.push({ ...c, role: origin && out.length === 0 ? 'origin' : 'use' });
         }
         return out;
     }
 
     async function runOnce() {
         const runAt = new Date(s.now()).toISOString();
-        const { uses, hints, errors } = await collect();
+        const { uses, errors } = await collect();
         const canon = resolver();
-        const found = detectCandidates(uses, {
-            minUses: config.importer.minUses, minDays: config.importer.minDays, hints,
-            max: Math.max(1, Number(config.importer.maxCandidates) || 10),
-        });
-        let created = 0;
+        const known = await entries.internetEntries({ limit: config.importer.maxKnownMemes || 5000 });
+        const found = [];
         let enriched = 0;
-        for (const candidate of found) {
+        for (const entry of known) {
+            const title = normalize(entry.title);
+            if (title.length < 4) continue;
+            const namedUses = uses.filter((use) => ` ${normalize(use.quote_text)} `.includes(` ${title} `));
+            if (!namedUses.length) continue;
+            found.push(entry.slug);
             try {
-                const cites = await materialize(candidate, canon);
+                const cites = await materialize({ phrase: title, uses: namedUses }, canon, { origin: false });
                 if (!cites.length) continue;
                 const firstSeen = cites.reduce((m, c) => (Date.parse(c.observed_at) < Date.parse(m) ? c.observed_at : m), cites[0].observed_at);
                 const lastSeen = cites.reduce((m, c) => (Date.parse(c.observed_at) > Date.parse(m) ? c.observed_at : m), cites[0].observed_at);
-                const title = displayTitle(candidate.phrase);
-                const summary = cleanSummary(title, `"${title}" recurs in ${cites.length} moments across ${new Set(cites.map((c) => utcDay(c.observed_at))).size} days on OpenVibe, from ${firstSeen.slice(0, 10)} to ${lastSeen.slice(0, 10)}.${hints.includes(candidate.phrase) ? ' Chat\'s timeline names it too.' : ''}`);
-                // One entry per normalised title and kind: a phrase the table already has is enriched, whatever
-                // slug an earlier ingest gave it. A different slug never means a different joke.
-                const r = await entries.upsertCandidate({
-                    slug: slugify(title), title, kind: candidate.phrase.split(' ').length <= 4 ? 'catchphrase' : 'meme',
-                    summary, status: statusFor(firstSeen, lastSeen, s.now()), first_seen_at: firstSeen, last_seen_at: lastSeen,
-                    visibility: 'hidden', citations: cites,
-                });
-                if (r.created) created++;
-                else if (r.changed) enriched++;
+                const result = await entries.enrich(entry.id, { first_seen_at: firstSeen, last_seen_at: lastSeen, cites });
+                if (result && result.changed) enriched++;
             } catch (err) {
-                errors.push(`candidate ${candidate.phrase}: ${err.message}`);
-                log.warn(`[OpenVibe.Meme] importer candidate failed: ${err.message}`);
+                errors.push(`known meme ${entry.slug}: ${err.message}`);
+                log.warn(`[OpenVibe.Meme] importer known meme ${entry.slug} failed: ${err.message}`);
             }
         }
         stats.runs++;
         stats.uses = uses.length;
         stats.candidates = found.length;
-        stats.created += created;
         stats.enriched += enriched;
         stats.errors += errors.length;
         stats.last_run_at = runAt;
         stats.last_error = errors[0] || null;
-        const out = { ok: errors.length === 0, uses: uses.length, candidates: found.length, created, enriched, errors };
-        log.log(`[OpenVibe.Meme] importer: ${uses.length} uses → ${found.length} candidates, ${created} created, ${enriched} enriched${errors.length ? `, ${errors.length} errors` : ''}`);
+        const out = { ok: errors.length === 0, uses: uses.length, candidates: found.length, created: 0, enriched, errors };
+        log.log(`[OpenVibe.Meme] importer: ${uses.length} uses → ${found.length} known memes matched, ${enriched} enriched${errors.length ? `, ${errors.length} errors` : ''}`);
         return out;
     }
 

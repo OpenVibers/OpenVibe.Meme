@@ -32,7 +32,7 @@ const { boot, check, done } = require('./helpers/boot');
             assert.strictEqual(home.status, 200);
             assert.match(home.headers.get('content-type'), /text\/markdown/);
             assert.ok(home.text.startsWith('---\ntitle:'));
-            for (const [path, heading] of [['/developers.md', '# The OpenVibe.Meme API'], ['/week.md', '# Meme of the week'], ['/make.md', '# Make a caption']]) {
+            for (const [path, heading] of [['/developers.md', '# The OpenVibe.Meme API'], ['/week.md', '# Meme of the week'], ['/browse.md', '# Explore memes'], ['/make.md', '# Make a meme']]) {
                 const r = await t.get(path);
                 assert.strictEqual(r.status, 200, path);
                 assert.ok(r.text.includes(heading), `${path} missing ${heading}`);

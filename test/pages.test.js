@@ -27,12 +27,15 @@ function jsonLd(html) {
         ],
     });
     const describedEntry = await t.ctx.entries.createCandidate({
-        slug: 'cat-typing', title: 'Cat typing', kind: 'meme', status: 'rising',
+        slug: 'cat-typing', title: 'Cat typing', kind: 'meme', scope: 'internet', status: 'rising',
         summary: 'A cat at a keyboard, typed as though the cat is answering a work email one slow paw at a time.',
-        first_seen_at: now, last_seen_at: now, visibility: 'public', citations: [],
+        first_seen_at: now, last_seen_at: now, visibility: 'public', citations: [
+            { role: 'origin', source_service: 'web', source_type: 'wikipedia', source_id: 'Cat_typing', quote_text: 'An early example of the cat-at-a-keyboard format.', url: 'https://en.wikipedia.org/wiki/Internet_meme', observed_at: now },
+            { role: 'use', source_service: 'web', source_type: 'commons', source_id: 'cat-typing-example', quote_text: 'A later remix of the cat-at-a-keyboard format.', url: 'https://example.com/cat-typing', observed_at: now },
+        ],
     });
     const hiddenEntry = await t.ctx.entries.createCandidate({
-        slug: 'not-yet', title: 'Not yet', kind: 'joke', summary: 'Hidden.', status: 'rising',
+        slug: 'not-yet', title: 'Not yet', kind: 'meme', scope: 'internet', summary: 'Hidden.', status: 'rising',
         first_seen_at: now, last_seen_at: now, visibility: 'hidden',
         citations: [{ role: 'origin', source_service: 'chat', source_type: 'chat_message', source_id: '1002', chat_message_id: 1002, quote_text: 'still the robot is offline, huh', url: `${t.upstreams.url}/`, observed_at: now }],
     });
@@ -41,13 +44,30 @@ function jsonLd(html) {
     try {
         await check('home: semantic, the entry, the week teaser, public cache with Vary: Cookie', async () => {
             const r = await t.get('/');
-            assert.strictEqual(r.status, 200);
+            assert.strictEqual(r.status, 200, r.text);
             assert.strictEqual(r.headers.get('cache-control'), 'public, max-age=60');
             assert.strictEqual(r.headers.get('vary'), 'Cookie');
-            for (const marker of ['id="mm-home"', 'id="mm-trending"', 'id="mm-week-teaser"', 'class="sc-room-scenes"', '<noscript><nav', '<footer id="ov-footer"', '<main id="main"', 'Robot is offline', '/make']) assert.ok(r.text.includes(marker), marker);
+            for (const marker of ['id="mm-home"', 'id="mm-trending"', 'id="mm-week-teaser"', 'class="sc-room-scenes"', '<noscript><nav', '<footer id="ov-footer"', '<main id="main"', 'Cat typing', '/browse', '/make']) assert.ok(r.text.includes(marker), marker);
             const types = jsonLd(r.text).map((x) => x['@type']);
             assert.ok(types.includes('WebSite'), types.join(','));
             assert.ok(types.includes('WebApplication'), types.join(','));
+        });
+
+        await check('the server-rendered meme library searches internet entries', async () => {
+            const r = await t.get('/browse?q=cat');
+            assert.strictEqual(r.status, 200, r.text);
+            assert.ok(r.text.includes('Explore memes'));
+            assert.ok(r.text.includes('Cat typing'));
+            assert.ok(r.text.includes('name="scope"'));
+            assert.ok(r.text.includes('<meta name="robots" content="noindex, nofollow">'));
+            const alias = await t.get('/search?q=cat');
+            assert.strictEqual(alias.status, 200);
+            assert.ok(alias.text.includes('Cat typing'));
+            const collection = await t.get('/browse?scope=internet');
+            assert.ok(collection.text.includes('Cat typing'));
+            const legacy = await t.get('/memes');
+            assert.strictEqual(legacy.status, 301);
+            assert.strictEqual(legacy.headers.get('location'), '/browse?scope=internet');
         });
 
         await check('a page drawn for a signed-in person is private, no-store', async () => {
@@ -57,27 +77,42 @@ function jsonLd(html) {
             assert.strictEqual(r.headers.get('vary'), 'Cookie');
         });
 
-        await check('one entry page carries the origin link, the timeline and the examples section', async () => {
+        await check('OpenVibe-only catchphrase pages redirect to the library homepage', async () => {
             const r = await t.get('/m/robot-is-offline');
+            assert.strictEqual(r.status, 301);
+            assert.strictEqual(r.headers.get('location'), '/');
+        });
+
+        await check('the meme API alias and PNG render use the internet collection and local renderer', async () => {
+            const list = await t.get('/api/v1/memes?scope=internet');
+            assert.strictEqual(list.status, 200);
+            assert.ok(list.json().entries.some((e) => e.slug === 'cat-typing'));
+            const stream = await t.get('/api/v1/memes/robot-is-offline');
+            assert.strictEqual(stream.status, 404);
+            const png = await t.get('/api/v1/render', { as: alice, json: { template_id: tpl.id, lines: ['a meme', 'in PNG'] } });
+            assert.strictEqual(png.status, 200, png.text);
+            assert.match(png.headers.get('content-type'), /image\/png/);
+        });
+
+        await check('an internet meme page carries its origin, timeline and examples', async () => {
+            const r = await t.get('/m/cat-typing');
             assert.strictEqual(r.status, 200);
             assert.strictEqual(r.headers.get('cache-control'), 'public, max-age=60');
             assert.ok(r.text.includes('id="mm-entry"'));
             assert.ok(r.text.includes('id="mm-origin"'));
             assert.ok(r.text.includes('id="mm-timeline"'));
             assert.ok(r.text.includes('id="mm-examples"'));
-            assert.ok(r.text.includes('the robot is offline again'));
-            assert.ok(r.text.includes('the robot is offline for good'));
-            assert.ok(r.text.includes('/v/9002?t=120'));
+            assert.ok(r.text.includes('An early example of the cat-at-a-keyboard format.'));
+            assert.ok(r.text.includes('A later remix of the cat-at-a-keyboard format.'));
+            assert.ok(r.text.includes('https://example.com/cat-typing'));
             // The one Share sheet (openvibe-shared 4.114.0): one button, with the entry's own public address.
             const share = r.text.match(/<button[^>]*data-ov-share-sheet[^>]*>/g) || [];
             assert.strictEqual(share.length, 1, 'one Share button: ' + share.join(' | '));
-            assert.ok(share[0].includes('data-url="https://openvibe.meme/m/robot-is-offline"'), share[0]);
+            assert.ok(share[0].includes('data-url="https://openvibe.meme/m/cat-typing"'), share[0]);
             assert.ok(share[0].includes('data-image="/shared/social/meme.jpg'), share[0]);
         });
 
         await check('one entry page describes itself for search and share cards', async () => {
-            const fallback = await t.get('/m/robot-is-offline');
-            assert.ok(fallback.text.includes('<meta name="description" content="Robot is offline: where the joke started, how it spread, and every use on OpenVibe.">'), 'the fallback line');
             const own = await t.get('/m/cat-typing');
             assert.ok(own.text.includes('<meta name="description" content="A cat at a keyboard, typed as though the cat is answering a work email one slow paw at a time.">'), 'the entry\'s own summary');
         });
@@ -105,7 +140,7 @@ function jsonLd(html) {
             const r = await t.get('/week');
             assert.strictEqual(r.status, 200);
             assert.ok(r.text.includes('id="mm-week"'));
-            assert.ok(r.text.includes('Robot is offline'));
+            assert.ok(r.text.includes('Cat typing'));
             const signed = await t.get('/week', { as: alice });
             assert.strictEqual(signed.status, 200);
             assert.strictEqual(signed.headers.get('cache-control'), 'private, no-store');
@@ -187,12 +222,13 @@ function jsonLd(html) {
             const robots = await t.get('/robots.txt');
             assert.match(robots.text, /Disallow: \/api\//);
             await t.ctx.entries.createCandidate({
-                slug: 'shake-weight', title: 'Shake Weight', kind: 'meme', summary: 'A dumbbell that shakes.', status: 'rising', first_seen_at: now, last_seen_at: now,
+                slug: 'shake-weight', title: 'Shake Weight', kind: 'meme', scope: 'internet', summary: 'A dumbbell that shakes.', status: 'rising', first_seen_at: now, last_seen_at: now,
                 visibility: 'public', citations: [], image_url: 'https://upload.wikimedia.org/wikipedia/commons/0/01/Shake_Weight.jpg', image_credit: 'Someone', image_license: 'CC BY 2.0',
             });
             const map = await t.get('/sitemap.xml');
             assert.strictEqual(map.status, 200);
-            assert.ok(map.text.includes('https://openvibe.meme/m/robot-is-offline'));
+            assert.ok(map.text.includes('https://openvibe.meme/m/cat-typing'));
+            assert.ok(!map.text.includes('https://openvibe.meme/m/robot-is-offline'), 'stream catchphrases are not indexed');
             // SEO-17: an entry's picture is in its <url>; an entry without one has no image entry.
             assert.match(map.text, /<loc>https:\/\/openvibe\.meme\/m\/shake-weight<\/loc>[^\n]*<image:image><image:loc>https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/0\/01\/Shake_Weight\.jpg<\/image:loc><\/image:image>/);
             assert.doesNotMatch(map.text, /<loc>https:\/\/openvibe\.meme\/m\/robot-is-offline<\/loc>[^\n]*<image:image>/);
