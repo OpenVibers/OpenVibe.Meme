@@ -182,7 +182,7 @@ ${e.summary ? `<p class="mm-summary">${esc(e.summary)}${share && share.url ? ' '
 
 <section class="mm-origin" id="mm-origin" aria-labelledby="mm-origin-h">
 <h2 id="mm-origin-h">Where it started</h2>
-${origin ? citation(origin) : (e.origin && e.origin.url ? `<p class="mm-origin-source"><a href="${esc(e.origin.url)}" rel="nofollow noopener">${esc(e.origin.title || e.origin.url)}</a>${e.origin.publisher ? ` · ${esc(e.origin.publisher)}` : ''}${e.origin.published_at ? ` · <time datetime="${esc(e.origin.published_at)}">${esc(String(e.origin.published_at).slice(0, 10))}</time>` : ''}${e.origin.quote ? `<q>${esc(e.origin.quote)}</q>` : ''}</p>` : '<p class="mm-muted">No origin citation is attached yet.</p>')}
+${origin ? citation(origin) : (e.origin && e.origin.url ? `<p class="mm-origin-source"><a href="${esc(e.origin.url)}" rel="nofollow noopener">${esc(e.origin.title || e.origin.url)}</a>${e.origin.publisher ? ` · ${esc(e.origin.publisher)}` : ''}${e.origin.published_at ? ` · <time datetime="${esc(e.origin.published_at)}">${esc(String(e.origin.published_at).slice(0, 10))}</time>` : ''}</p>${e.origin.quote ? `<p class="mm-origin-quote"><q>${esc(e.origin.quote)}</q></p>` : ''}` : '<p class="mm-muted">No origin citation is attached yet.</p>')}
 </section>
 
 <section class="mm-timeline-sec" id="mm-timeline" aria-labelledby="mm-timeline-h">
