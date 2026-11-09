@@ -211,6 +211,7 @@ function createClassicsJob({ config, s, entries, sources, judge, log = console }
                     slug,
                     title,
                     kind: 'classic',
+                    scope: 'internet',
                     summary,
                     status: 'classic',
                     first_seen_at: built.inception,

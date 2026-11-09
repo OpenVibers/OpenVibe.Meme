@@ -13,7 +13,7 @@ const { boot, check, done } = require('./helpers/boot');
         const bob = t.network.addUser('bob');
         const now = new Date().toISOString();
         const mk = (slug, title, visibility = 'public', observed = now) => t.ctx.entries.createCandidate({
-            slug, title, kind: 'meme', summary: 'A candidate.', status: 'rising',
+            slug, title, kind: 'meme', scope: 'internet', summary: 'A candidate.', status: 'rising',
             first_seen_at: observed, last_seen_at: observed, visibility,
             citations: [{ role: 'origin', source_service: 'chat', source_type: 'chat_message', source_id: String(Math.floor(Math.random() * 1e9)), chat_message_id: 1, quote_text: 'a repeated phrase here', url: `${t.upstreams.url}/`, observed_at: observed }],
         });

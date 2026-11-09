@@ -35,7 +35,7 @@ const { boot, check, done } = require('./helpers/boot');
 
         await check('a gone use (not the origin) keeps the entry public and re-indexes it', async () => {
             const e4 = await t.ctx.entries.createCandidate({
-                slug: 'use-gone', title: 'Use gone', kind: 'meme', summary: 'A proof.', status: 'rising',
+                slug: 'use-gone', title: 'Use gone', kind: 'classic', scope: 'internet', summary: 'A proof.', status: 'classic',
                 first_seen_at: '2026-10-20T10:00:00Z', last_seen_at: now, visibility: 'public',
                 citations: [
                     { role: 'origin', source_service: 'chat', source_type: 'chat_message', source_id: '1001', chat_message_id: 1001, quote_text: 'the robot is offline again', url: `${t.upstreams.url}/`, observed_at: '2026-10-20T10:00:00Z' },

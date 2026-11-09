@@ -16,12 +16,13 @@ const { render, esc } = require('./html');
 
 const NETWORK_URL = 'https://openvibe.network';
 const SITE_NAME = 'OpenVibe.Meme';
-const TAGLINE = 'The open meme database, rebuilt with AI.';
+const TAGLINE = 'The open meme encyclopedia and meme maker.';
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 const NAV = [
     { label: 'Home', href: '/' },
+    { label: 'Explore', href: '/browse' },
     { label: 'This week', href: '/week' },
-    { label: 'Make a caption', href: '/make' },
+    { label: 'Make a meme', href: '/make' },
     { label: 'Developers', href: '/developers' },
 ];
 

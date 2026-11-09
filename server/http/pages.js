@@ -5,7 +5,8 @@
  * Public pages are served `public, max-age=60` with Vary: Cookie; a page drawn for a signed-in person is
  * `private, no-store`.
  *
- *   /                 trending, meme of the week, the generator teaser
+ *   /                 trending internet memes, the week teaser, the maker
+ *   /browse|/search   the public meme library and server-rendered filters
  *   /m/:slug          an entry: origin with its citation link, the use timeline, examples, the report form
  *   /week             this week's candidates and the vote form (POST /week/vote)
  *   /make             the caption generator form (POST /make) with a server-rendered preview (GET /make)
@@ -39,23 +40,52 @@ function createPageRoutes(ctx) {
     const notFromHere = (req, res) => page(req, res, { title: 'Not from this site', body: raw(html`<div class="mm-wrap mm-page-pad mm-narrow"><div class="mm-empty"><h1>That came from somewhere else</h1><p class="mm-muted">Use the form on <a href="/">OpenVibe.Meme</a>.</p></div></div>`) }, 403);
 
     async function counts() {
-        const rows = await s.db.many("SELECT COUNT(*)::int AS entries, (SELECT COUNT(*)::int FROM meme_citations c JOIN meme_entries e ON e.id = c.entry_id WHERE e.visibility = 'public') AS citations FROM meme_entries WHERE visibility = 'public'");
+        const rows = await s.db.many("SELECT COUNT(*)::int AS entries, (SELECT COUNT(*)::int FROM meme_citations c JOIN meme_entries e ON e.id = c.entry_id WHERE e.visibility = 'public' AND e.scope = 'internet') AS citations FROM meme_entries WHERE visibility = 'public' AND scope = 'internet'");
         return rows[0] || { entries: 0, citations: 0 };
     }
 
     // ── Home ─────────────────────────────────────────────────
     r.get('/', async (req, res) => {
         const { week } = currentWeek(s.now());
-        const [trending, weekOut, c] = await Promise.all([entries.trending({ limit: 8 }), entries.week({ week }), counts()]);
-        const feature = await entries.showcase(trending[0]);
+        const [trendResult, weekOut, c] = await Promise.all([
+            entries.list({ limit: 8, scope: 'internet', sort: 'top', window: 'week' }),
+            entries.week({ week }), counts(),
+        ]);
+        const trending = trendResult.entries || [];
+        const feature = null;
         return page(req, res, {
             index: true, cache: PUBLIC_CACHE, agentLayer: true,
             title: null,
-            description: 'The open meme database, rebuilt with AI: every entry cites the moment it happened, follows its later uses, and people vote for meme of the week.',
+            description: 'Explore an open meme encyclopedia: learn what memes mean, trace their origins and variations, and make your own with reusable templates.',
             jsonLd: homeJsonLd(config),
             body: raw(views.home({ trending, week: weekOut, counts: c, feature })),
         });
     });
+
+    // ── Public meme library ─────────────────────────────────
+    async function browsePage(req, res) {
+        const filters = {
+            q: String(req.query.q || '').trim().slice(0, 120),
+            scope: req.query.scope === 'internet' ? 'internet' : null,
+            kind: ['classic', 'format', 'meme'].includes(req.query.kind) ? req.query.kind : null,
+            sort: req.query.sort === 'top' ? 'top' : 'newest',
+        };
+        const result = await entries.list({ ...filters, limit: 50 });
+        const invalid = result.error || null;
+        const rows = invalid ? [] : result.entries;
+        const label = filters.q ? `Search: ${filters.q}` : filters.scope || filters.kind || filters.sort === 'top' ? 'Explore internet memes' : 'Explore memes';
+        return page(req, res, {
+            index: !filters.q && !invalid,
+            cache: PUBLIC_CACHE,
+            agentLayer: !filters.q && !invalid,
+            title: label,
+            description: 'Browse an open meme encyclopedia with researched origins, spread, variations, examples, and reusable templates.',
+            jsonLd: [seo.jsonLd.webPage({ name: label, url: `${base()}/browse`, description: 'Explore researched internet memes and formats.', siteUrl: base() })],
+            body: raw(views.browse({ entries: rows, filters, error: invalid })),
+        });
+    }
+    r.get(['/browse', '/search'], browsePage);
+    r.get('/memes', (req, res) => res.redirect(301, '/browse?scope=internet'));
 
     // ── One entry ────────────────────────────────────────────
     /** A search result and share-card line: the entry's own summary or first use, cut at a word to 155 characters. */
@@ -85,6 +115,8 @@ function createPageRoutes(ctx) {
             }
         }
         if (!row || (row.visibility === 'hidden' && !staff)) return notFound(req, res);
+        // OpenVibe-only catchphrases are not encyclopedia entries; retire their old public pages.
+        if (row.scope === 'openvibe') return res.redirect(301, '/');
         const citations = await entries.citations(row.id);
         const e = entries.wireEntry(row);
         const description = metaDescription(e, citations);
@@ -160,8 +192,8 @@ function createPageRoutes(ctx) {
         const preview = chosen && previewLines.length ? { template: chosen, lines: previewLines } : null;
         return page(req, res, {
             index: true, cache: PUBLIC_CACHE, agentLayer: true,
-            title: 'Make a caption',
-            description: 'Pick a template, type up to four lines and preview them over the image before saving.',
+            title: 'Make a meme',
+            description: 'Choose a reusable meme template, write a caption, preview as you type, and save an editable link or export a PNG.',
             body: raw(views.make({ templates, values: { ...values, template_id: chosen ? chosen.id : '' }, preview, signedIn: Boolean(signedIn(req)), problem })),
         }, status);
     }

@@ -134,14 +134,12 @@ function load(env = process.env) {
             register: env.MEME_SOURCES_REGISTER === '1' || env.MEME_SOURCES_REGISTER === 'true',
         },
 
-        // The candidate importer: every 30 minutes, off under MEME_DRILL (tests call runOnce()).
+        // The Live reference linker: every 30 minutes, off under MEME_DRILL (tests call runOnce()).
         importer: {
             intervalMs: Math.max(60_000, int(env.MEME_IMPORTER_INTERVAL_MS, 30 * 60_000)),
-            minUses: Math.max(2, int(env.MEME_IMPORTER_MIN_USES, 2)),
-            minDays: Math.max(2, int(env.MEME_IMPORTER_MIN_DAYS, 2)),
             maxTopics: Math.min(50, Math.max(1, int(env.MEME_IMPORTER_MAX_TOPICS, 12))),
             maxVods: Math.min(50, Math.max(1, int(env.MEME_IMPORTER_MAX_VODS, 12))),
-            maxCandidates: Math.min(30, Math.max(1, int(env.MEME_IMPORTER_MAX_CANDIDATES, 10))),
+            maxKnownMemes: Math.min(5000, Math.max(1, int(env.MEME_IMPORTER_MAX_KNOWN_MEMES, 5000))),
         },
 
         // Deep dives (M5): research.gather + ai.generate, with a daily budget of their own. Off without the AI URL
@@ -187,7 +185,7 @@ function load(env = process.env) {
             userAgent: env.MEME_WIKI_USER_AGENT || 'OpenVibe.Meme/0.2 (+https://openvibe.meme; contact@openvibe.network)',
             timeoutMs: Math.max(1000, int(env.MEME_WIKI_TIMEOUT_MS, 20_000)),
             minIntervalMs: Math.max(0, int(env.MEME_WIKI_MIN_INTERVAL_MS, 250)),
-            limit: Math.min(1000, Math.max(1, int(env.MEME_ENCYCLOPEDIA_LIMIT, 400))),
+            limit: Math.min(1000, Math.max(1, int(env.MEME_ENCYCLOPEDIA_LIMIT, 300))),
             // The lists the seeds are read from (Wikipedia, CC BY-SA): the phenomena list and the category behind it.
             lists: String(env.MEME_ENCYCLOPEDIA_LISTS || 'List_of_Internet_phenomena').split(',').map((x) => x.trim()).filter(Boolean),
             categories: String(env.MEME_ENCYCLOPEDIA_CATEGORIES || 'Internet memes,Memes').split(',').map((x) => x.trim()).filter(Boolean),

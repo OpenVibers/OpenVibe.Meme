@@ -2,13 +2,14 @@
 
 /**
  * The Meme room's pages (plan 2026-10-28 §5.7). Server-rendered and whole without JavaScript: every action is a
- * plain form or link. public/js/meme.js is a one-comment placeholder the main session replaces; the preview and
- * the vote work without it.
+ * plain form or link. public/js/meme.js upgrades the template search, live preview, and PNG export without becoming
+ * a requirement for reading the library or submitting the server-rendered form.
  *
- *   home({ trending, week, feature })              trending, meme of the week, the first entry's real origin and uses
+ *   home({ trending, week })                       internet-meme discovery, meme of the week, and the maker
  *   entry({ e, citations, signedIn, staff })       the origin with its citation link, the use timeline, examples
  *   week({ out, signedIn })                        this week's candidates and the vote form
- *   make({ templates, values, preview, signedIn }) the caption generator form
+ *   browse({ entries, filters })                   searchable public internet-meme library
+ *   make({ templates, values, preview, signedIn }) the caption editor form
  *   caption({ caption, template, mine })           one saved caption, text over the image
  *   developers()                                   the API
  *   signIn({ title, text, next })                  a page that needs an account
@@ -69,17 +70,13 @@ function empty(text, href = '/week', label = 'This week’s ballot') {
 
 /** The room's picture: a meme's family tree growing from its first moment, stickers fanning off the branches. */
 function treeMotif(feature = null) {
-    const e = feature && feature.entry;
-    const cites = feature && Array.isArray(feature.citations) ? feature.citations : [];
-    const c = cites.find((x) => x.role === 'origin') || cites[0] || null;
-    const at = c ? clock(c.offset_seconds) : null;
-    const root = e ? esc(e.title) : "A meme's first moment";
-    const moment = c ? `${esc(SOURCE_LABEL[c.source_type] || c.source_type)}${at ? ` · ${esc(at)}` : ''}` : 'a cited moment';
+    const root = "A meme's origin";
+    const moment = 'first format';
     return `<div class="mm-tree" aria-hidden="true">
 <svg class="mm-tree-lines" viewBox="0 0 400 280" preserveAspectRatio="none"><path d="M200 78 C200 128 92 118 92 176"/><path d="M200 78 L200 176"/><path d="M200 78 C200 128 308 118 308 176"/><path d="M92 206 C92 236 52 232 52 258"/><path d="M92 206 C92 236 132 232 132 258"/><path d="M308 206 C308 236 348 232 348 258"/></svg>
-<span class="mm-node mm-node-root"><b>${root}</b><small>${e ? 'the first moment' : 'chat · the first time'}</small></span>
-<span class="mm-node mm-n1">${moment}</span><span class="mm-node mm-n2">a clip</span><span class="mm-node mm-n3">the Rundown</span>
-<span class="mm-sticker mm-s1">classic</span><span class="mm-sticker mm-s2">lol</span><span class="mm-sticker mm-s3">rising</span>
+<span class="mm-node mm-node-root"><b>${root}</b><small>traced to sources</small></span>
+<span class="mm-node mm-n1">${moment}</span><span class="mm-node mm-n2">new variations</span><span class="mm-node mm-n3">shared culture</span>
+<span class="mm-sticker mm-s1">origin</span><span class="mm-sticker mm-s2">remix</span><span class="mm-sticker mm-s3">history</span>
 </div>`;
 }
 
@@ -119,36 +116,39 @@ function home({ trending = [], week = null, counts = {}, feature = null } = {}) 
 <ol class="mm-entries mm-entries-week">${candidates.map(card).join('')}</ol>
 </section>` : '';
     const firsts = [
-        !trending.length && ['The first entries are on their way', 'Each one is checked against the chat line or VOD second it started from before it is public.', '/developers', 'How entries are built'],
-        !candidates.length && ['Make the first caption', 'Pick a template, write the lines, and it is saved as text anyone can remix.', '/make', 'Open the generator'],
+        !trending.length && ['Start with a classic', 'Browse the internet meme encyclopedia and follow a format from its first trace to its latest variations.', '/browse?scope=internet', 'Explore internet memes'],
+        !candidates.length && ['Make a meme', 'Choose a reusable template, write a caption, and export a PNG or save a remixable link.', '/make', 'Open the meme maker'],
     ].filter(Boolean);
     const beFirst = firsts.length ? `<section class="mm-section mm-first" aria-labelledby="mm-first-h"><h2 id="mm-first-h">Be the first</h2><ul class="mm-first-list">${firsts.map(([title, text, href, label]) => `<li><b>${esc(title)}</b><span>${esc(text)}</span><a href="${esc(href)}">${esc(label)}</a></li>`).join('')}</ul></section>` : '';
     const live = `${trendingSec}${weekSec}`;
     const room = sc.room({
         room: 'meme',
         hero: {
-            title: 'Every joke has a first time',
-            lede: 'The open meme database: each running joke with the moment it started and every later use. Vote for meme of the week, or caption a template.',
-            start: { href: '/week', label: 'Vote for meme of the week' },
-            chips: [{ label: 'Make a caption', href: '/make' }, ...(trending.length ? [{ label: 'Trending', href: '#mm-trending' }] : []), { label: 'The API', href: '/developers' }],
+            title: 'Know the meme. Make it yours.',
+            lede: 'An open encyclopedia of internet memes: what each one means, where it began, how it spread, and the formats people still remix.',
+            start: { href: '/browse', label: 'Explore the meme library' },
+            chips: [{ label: 'Make a meme', href: '/make' }, ...(trending.length ? [{ label: 'Trending', href: '#mm-trending' }] : []), { label: 'The API', href: '/developers' }],
             proof: Number(counts.entries) ? [{ value: Number(counts.entries), label: Number(counts.entries) === 1 ? 'entry' : 'entries' }] : [],
             motif: treeMotif(feature),
         },
         scenes: [
-            { title: 'A stream moment becomes an entry', text: 'An entry starts where the joke did: the chat line or the second of the VOD, quoted word for word and linked. A source that disappears is marked, and an entry without its origin goes back into hiding.',
-                html: homeCitation(feature),
-                action: feature ? { href: `/m/${feature.entry.slug}`, label: 'Open the entry' } : { href: '/developers', label: 'How entries are built' } },
-            { title: 'Watch a joke rise', text: 'Every use is dated, so you can see a joke catch on, peak and become a classic. Rising first on the trending list.',
-                html: homeRise(feature),
-                action: { href: '/week', label: 'See this week\'s ballot' } },
-            { title: 'Caption it', text: 'Pick a template, type up to four lines and see them over the picture. A caption is saved as text, so anyone can remix it.',
-                html: `<div><p class="mm-kicker">Example caption</p><figure class="mm-caption-card mm-demo-caption"><img src="/img/template-classic.svg" alt="An example caption on a template"><figcaption><span>when the robot is offline</span><span>and chat has to cope</span></figcaption></figure></div>`,
-                action: { href: '/make', label: 'Open the generator' } },
+            { title: 'Find the format behind the joke', text: 'Start with the name or a phrase you remember. Each entry explains the format in plain language and connects its origin, spread, variations, examples, and related memes.',
+                html: `<form class="mm-library-search" action="/browse" method="get" role="search"><label for="mm-home-q">Search memes and formats</label><div><input id="mm-home-q" name="q" type="search" maxlength="120" placeholder="Distracted Boyfriend, Rickroll…"><button class="mm-btn" type="submit">Search</button></div><p><a href="/browse?scope=internet">Browse internet memes</a> · <a href="/browse?sort=top">Most used</a></p></form>`,
+                action: { href: '/browse?scope=internet', label: 'Browse the encyclopedia' } },
+            { title: 'See how a meme changes', text: 'Origins and spread are cited, variations show how a format mutates, and related entries connect the larger family of memes.',
+                html: `<ol class="mm-history-strip"><li><b>Origin</b><span>Find the earliest traceable example</span></li><li><b>Spread</b><span>Follow how the format traveled</span></li><li><b>Remix</b><span>See what people made from it</span></li></ol>`,
+                action: { href: '/browse?scope=internet', label: 'Explore researched entries' } },
+            { title: 'Make a meme in seconds', text: 'Choose a reusable template, add your own caption, preview it instantly, and save a link others can remix.',
+                html: `<div class="mm-rise-card"><span class="mm-rise-mark" aria-hidden="true">↗</span><div><b>Fresh formats, lasting classics</b><p>Find new entries and familiar favorites in one searchable library.</p></div></div>`,
+                action: { href: '/make', label: 'Open the meme maker' } },
+            { title: 'Made for remixing', text: 'Captions stay editable as text. Templates carry their source and reuse licence, and uploaded examples go through moderation.',
+                html: `<div><p class="mm-kicker">Example caption</p><figure class="mm-caption-card mm-demo-caption"><img src="/img/template-classic.svg" alt="An example caption on a template"><figcaption><span>when you find the original meme</span><span>the repost has a million views</span></figcaption></figure></div>`,
+                action: { href: '/make', label: 'Make your own' } },
         ],
         faq: { items: [
-            ['Where do the entries come from?', 'From OpenVibe itself: the Rundown, VOD transcripts and the public chat. An importer proposes a candidate when a phrase comes back on more than one day; a person checks it against its source before it is public.'],
-            ['Can I get something taken down?', 'Yes. Every entry has a takedown and correction form for signed-in people, and staff answer it. VOD 5709 and clip 483 are never cited.'],
-            ['Is the database open?', 'Yes: every public entry and citation is in the API, and in OpenVibe\'s Search.'],
+            ['What is in the meme library?', 'Internet memes and formats, documented with original sources, clear explanations, examples, variations, and links to related entries. Stream appearances are shown only when a known meme is named in a transcript.'],
+            ['Can I get something corrected or removed?', 'Yes. Every entry has a correction and takedown report path. Example uploads are reviewed before publication.'],
+            ['Can I reuse templates?', 'Each template page names its source and licence. Use licensed templates or artwork you have permission to upload.'],
         ] },
     });
     // What is real goes above the scenes; what is still missing goes after them.
@@ -223,25 +223,45 @@ ${signedIn ? `<form method="post" action="/week/vote" class="mm-inline"><input t
 
 const LINES = [1, 2, 3, 4];
 
+function browse({ entries = [], filters = {}, error = null } = {}) {
+    const q = filters.q || '';
+    const scope = filters.scope || '';
+    const sort = filters.sort || 'newest';
+    const kinds = [['', 'All types'], ['classic', 'Internet memes'], ['format', 'Formats'], ['meme', 'Memes']];
+    return `<div class="mm-wrap" id="mm-browse">
+<header class="mm-page-h"><p class="mm-kicker">The open meme encyclopedia</p><h1>Explore memes</h1><p class="mm-lede">Search meme names and formats, follow their origins and variations, and find a template to remix.</p></header>
+<form class="mm-browse-filters mm-card" action="/browse" method="get" role="search"><label class="mm-field"><span>Search</span><input type="search" name="q" value="${esc(q)}" maxlength="120" placeholder="Try a meme name or phrase"></label>
+<label class="mm-field"><span>Collection</span><select name="scope"><option value="">All collections</option><option value="internet"${scope === 'internet' ? ' selected' : ''}>Internet memes</option></select></label>
+<label class="mm-field"><span>Type</span><select name="kind">${kinds.map(([value, label]) => `<option value="${value}"${filters.kind === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
+<label class="mm-field"><span>Order</span><select name="sort"><option value="newest"${sort === 'newest' ? ' selected' : ''}>Recently added</option><option value="top"${sort === 'top' ? ' selected' : ''}>Most used</option></select></label><button class="mm-btn" type="submit">Find memes</button></form>
+${error ? '<p class="mm-note is-bad" role="alert">Choose a supported filter and try again.</p>' : ''}
+<section class="mm-section" aria-live="polite"><div class="mm-head-row"><h2>${q ? `Results for “${esc(q)}”` : scope === 'internet' ? 'Internet memes' : 'The library'}</h2><span class="mm-count">${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}</span></div>
+${entries.length ? `<ol class="mm-entries">${entries.map((e) => `<li class="mm-entry-card"><a class="mm-entry-link" href="/m/${esc(e.slug)}"><span class="mm-entry-title">${esc(e.title)}</span><span class="mm-entry-summary">${esc(e.summary || e.meaning || 'Explore the origin, spread, and examples.')}</span><span class="mm-entry-meta">${kindLabel(e.kind)} · ${statusBadge(e.status)}</span></a></li>`).join('')}</ol>` : empty(q ? 'No matching memes yet. Try a shorter name or browse the full library.' : 'No public entries match these filters yet.', '/make', 'Make a meme')}
+</section><p class="mm-fine">Entries cite their sources. Images appear only when their licence permits reuse or a member supplied them.</p>
+</div>`;
+}
+
 function make({ templates = [], values = {}, preview = null, signedIn = false, problem = null } = {}) {
     const v = { template_id: templates[0] ? templates[0].id : '', visibility: 'public', ...values };
     const lines = LINES.map((i) => v[`line${i}`] || '');
     return `<div class="mm-wrap" id="mm-make">
-<header class="mm-page-h"><p class="mm-kicker">The caption generator</p><h1>Put words on a template</h1>
-<p class="mm-lede">Pick a template and type up to four lines, ${LINES.length * 120} characters at most. The preview is HTML text over the image; saving stores the lines, never a picture.</p></header>
+<header class="mm-page-h"><p class="mm-kicker">Meme maker</p><h1>Make a meme</h1>
+<p class="mm-lede">Choose a reusable template, write up to four lines, and preview as you type. Sign in to save an editable link or export a PNG.</p></header>
 ${problem ? `<p class="mm-note is-bad" role="alert">${esc(problem)}</p>` : ''}
 <div class="mm-make-grid">
 <form id="mm-caption-form" class="mm-form mm-card" method="post" action="/make">
-<fieldset class="mm-templates"><legend>Template</legend>
+<label class="mm-field"><span>Find a template</span><input id="mm-template-filter" type="search" placeholder="Search templates" aria-controls="mm-template-grid" autocomplete="off"></label>
+<fieldset class="mm-templates" id="mm-template-grid"><legend>Choose a template</legend>
 ${templates.map((t) => `<label class="mm-template${t.id === v.template_id ? ' is-chosen' : ''}"><input type="radio" name="template_id" value="${esc(t.id)}"${t.id === v.template_id ? ' checked' : ''} required><img src="${esc(t.image_url)}" alt="" width="220" height="140" loading="lazy"><span><b>${esc(t.name)}</b><small>${Number(t.box_count)} ${Number(t.box_count) === 1 ? 'box' : 'boxes'} · ${esc(t.license)}</small></span></label>`).join('')}
 </fieldset>
-${LINES.map((i) => `<label class="mm-field"><span>Line ${i}</span><input name="line${i}" type="text" maxlength="120" value="${esc(lines[i - 1])}" placeholder="${i === 1 ? 'when the robot is offline' : ''}"></label>`).join('')}
+${LINES.map((i) => `<label class="mm-field"><span>Line ${i}</span><input name="line${i}" type="text" maxlength="120" value="${esc(lines[i - 1])}" placeholder="${i === 1 ? 'when you recognize the format' : ''}"></label>`).join('')}
 <label class="mm-field"><span>Who can see it?</span><select name="visibility"><option value="public"${v.visibility === 'public' ? ' selected' : ''}>Anyone</option><option value="unlisted"${v.visibility === 'unlisted' ? ' selected' : ''}>Anyone with the link</option><option value="hidden"${v.visibility === 'hidden' ? ' selected' : ''}>Only me</option></select></label>
 <div class="mm-actions"><button class="mm-btn" type="submit">Save the caption</button><button class="mm-btn mm-btn-quiet" type="submit" formaction="/make" formmethod="get">Preview</button></div>
 ${signedIn ? '' : '<p class="mm-fine">You can preview without signing in. <a href="/auth/login?next=%2Fmake">Sign in</a> to save a caption.</p>'}
 </form>
-<aside class="mm-preview" id="mm-preview" aria-labelledby="mm-preview-h"><h2 id="mm-preview-h">Preview</h2>
+<aside class="mm-preview" id="mm-preview" aria-labelledby="mm-preview-h"><h2 id="mm-preview-h">Your canvas</h2>
 ${preview ? `<figure class="mm-caption-card"><img src="${esc(preview.template.image_url)}" alt=""><figcaption>${preview.lines.map((l) => `<span>${esc(l)}</span>`).join('')}</figcaption></figure><p class="mm-fine">Text only, over ${esc(preview.template.name)}. Nothing is saved until you press Save.</p>` : '<p class="mm-muted">Press Preview to see your lines over the template.</p>'}
+${signedIn ? '<button class="mm-btn mm-btn-quiet" type="button" data-render-png>Download PNG</button><p class="mm-fine" data-render-status aria-live="polite"></p>' : '<p class="mm-fine">Sign in to export a PNG. Your preview is still free to use.</p>'}
 </aside>
 </div>
 </div>`;
@@ -271,11 +291,14 @@ function developers() {
 <p class="mm-lede">JSON under <code>/api/v1</code>, with <code>application/problem+json</code> errors. A person is the <code>meme_at</code> session cookie or a Network user token as a Bearer.</p></header>
 <section><h2>Read</h2><dl class="mm-eps">
 ${ep('GET', '/api/v1/entries?limit=&cursor=&kind=&status=', 'Public entries, newest first, cursor-paged (at most 50).')}
+${ep('GET', '/api/v1/memes?scope=internet&q=&sort=top&window=week', 'Meme-library alias for public entries with collection, search, and usage filters.')}
 ${ep('GET', '/api/v1/entries/:slug', 'One entry with every citation and the use timeline. A hidden one is 404 unless you are staff.')}
+${ep('GET', '/api/v1/memes/:slug', 'Meme-library alias for an entry, including its citations and timeline.')}
 ${ep('GET', '/api/v1/entries/:slug/series?days=30', 'Uses per UTC day, zero-filled (1–365 days).')}
 ${ep('GET', '/api/v1/trending', 'Public entries, rising first.')}
 ${ep('GET', '/api/v1/week', 'This ISO week’s candidates and their vote counts.')}
 ${ep('GET', '/api/v1/templates', 'Caption templates: image, box count, source and license.')}
+${ep('POST', '/api/v1/render', 'Render a caption to PNG from a licensed template and 1–4 text lines; same contract as /generate.')}
 ${ep('GET', '/api/v1/captions/:id', 'One saved caption (a hidden one is 404 unless it is yours or you are staff).')}
 </dl></section>
 <section><h2>Write (signed in)</h2><dl class="mm-eps">
@@ -297,4 +320,4 @@ function notFound() {
     return `<div class="mm-wrap mm-page-pad mm-narrow"><div class="mm-empty" id="mm-not-found"><p class="mm-kicker">404</p><h1>This meme is not here</h1><p>It may have been hidden, its origin source may be gone, or the address was never an entry.</p><a class="mm-btn" href="/">Back to the memes</a></div></div>`;
 }
 
-module.exports = { home, entry, week, make, caption, signIn, developers, notFound, statusBadge, kindLabel, citation, clock, STATUS_LABEL, KIND_LABEL, SOURCE_LABEL };
+module.exports = { home, entry, week, browse, make, caption, signIn, developers, notFound, statusBadge, kindLabel, citation, clock, STATUS_LABEL, KIND_LABEL, SOURCE_LABEL };

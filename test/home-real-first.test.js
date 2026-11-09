@@ -15,7 +15,7 @@ assert.ok(!empty.includes('id="mm-trending"') && !empty.includes('id="mm-week-te
 assert.ok(!empty.includes('href="#mm-trending"'), 'no chip to a section that is not there');
 const scenes = empty.indexOf('class="sc-room-scenes"');
 assert.ok(scenes > 0 && empty.indexOf('Be the first') > scenes, 'the row follows the scenes');
-assert.ok(empty.includes('href="/make">Open the generator</a>') && empty.includes('href="/developers">How entries are built</a>'), 'each says how it starts');
+assert.ok(empty.includes('href="/make">Open the meme maker</a>') && empty.includes('href="/browse?scope=internet">Explore internet memes</a>'), 'each leads into the library or maker');
 
 const entry = { slug: 'robot-offline', title: 'Robot is offline', kind: 'joke', summary: 'When the robot drops.', status: 'rising', uses: 4, citations: [] };
 const some = views.home({ trending: [entry], week: { candidates: [entry] }, counts: { entries: 1 } });

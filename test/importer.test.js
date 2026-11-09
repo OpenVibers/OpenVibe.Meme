@@ -1,79 +1,56 @@
 'use strict';
-/**
- * The importer reads the fixture Chat history/timeline, Rundown topics and VOD transcripts, finds "robot is
- * offline" across four uses on three days, canonicalises `/v/9001?t=60` → `/v/9002?t=120`, and inserts the
- * candidate hidden. It never publishes; a second run enriches nothing and makes no second entry. The deny-list
- * take (VOD 5709) never reaches a citation.
- */
+/** Live mentions enrich a known internet meme with source-linked uses; repeated stream phrases never become entries. */
 const assert = require('assert');
 const { boot, check, done } = require('./helpers/boot');
 
 (async () => {
     const t = await boot();
     try {
+        const now = new Date().toISOString();
+        const known = await t.ctx.entries.createCandidate({
+            slug: 'robot-is-offline', title: 'Robot is offline', kind: 'classic', scope: 'internet',
+            summary: 'A test encyclopedia entry with a sourced origin.', status: 'classic',
+            first_seen_at: '2026-10-20T00:00:00Z', last_seen_at: '2026-10-20T00:00:00Z', visibility: 'public',
+            citations: [{ role: 'origin', source_service: 'web', source_type: 'wikipedia', source_id: 'robot-is-offline',
+                quote_text: 'This test entry has an independently cited origin.', url: 'https://en.wikipedia.org/wiki/Internet_meme', observed_at: '2026-10-20T00:00:00Z' }],
+        });
         let out = null;
-        await check('the fixture produces one candidate from ≥2 uses on ≥2 days, hidden', async () => {
+        await check('known meme references add cited uses without creating stream-meme entries', async () => {
             out = await t.ctx.importer.runOnce();
             assert.strictEqual(out.errors.length, 0, JSON.stringify(out.errors));
-            assert.ok(out.created >= 1);
-            const e = await t.ctx.s.db.maybe("SELECT * FROM meme_entries WHERE slug = 'robot-is-offline'");
-            assert.ok(e, 'the candidate entry exists');
-            assert.strictEqual(e.visibility, 'hidden');
-            assert.strictEqual(e.title, 'Robot is offline');
-            const cites = await t.ctx.s.db.many('SELECT * FROM meme_citations WHERE entry_id = $1 ORDER BY observed_at, id', [e.id]);
-            assert.ok(cites.length >= 3, `expected several citations, got ${cites.length}`);
-            const days = new Set(cites.map((c) => String(c.observed_at).slice(0, 10)));
-            assert.ok(days.size >= 2, 'uses are on at least two days');
+            assert.strictEqual(out.created, 0);
+            assert.ok(out.candidates >= 1, 'the known meme title was named in source text');
+            assert.ok(out.enriched >= 1, 'the known entry gained citations');
+            const entry = await t.ctx.s.db.maybe("SELECT * FROM meme_entries WHERE slug = 'robot-is-offline'");
+            assert.ok(entry);
+            assert.strictEqual(entry.id, known.entry.id);
+            assert.strictEqual(entry.visibility, 'public');
+            assert.strictEqual(entry.scope, 'internet');
+            const cites = await t.ctx.s.db.many('SELECT * FROM meme_citations WHERE entry_id = $1 ORDER BY observed_at, id', [entry.id]);
+            assert.ok(cites.length >= 4, `expected origin and several uses, got ${cites.length}`);
             assert.strictEqual(cites.filter((c) => c.role === 'origin').length, 1);
-            assert.ok(cites.some((c) => c.source_type === 'chat_message'));
-            assert.ok(cites.some((c) => c.source_type === 'rundown_segment'));
-            assert.ok(cites.some((c) => c.source_type === 'vod'));
+            assert.ok(cites.some((c) => c.role === 'use' && c.source_type === 'chat_message'));
+            assert.ok(cites.some((c) => c.role === 'use' && c.source_type === 'rundown_segment'));
+            assert.ok(cites.some((c) => c.role === 'use' && c.source_type === 'vod'));
         });
 
-        await check('a joined-VOD redirect is stored canonically (9002@120, not 9001@60)', async () => {
+        await check('joined-VOD references keep their canonical time and prohibited sources stay absent', async () => {
             const c = await t.ctx.s.db.maybe("SELECT * FROM meme_citations WHERE source_type = 'rundown_segment' LIMIT 1");
             assert.strictEqual(Number(c.vod_id), 9002);
             assert.strictEqual(Number(c.offset_seconds), 120);
             assert.match(c.url, /\/v\/9002\?t=120$/);
-        });
-
-        await check('no citation names VOD 5709 or clip 483', async () => {
             const bad = await t.ctx.s.db.value('SELECT COUNT(*)::int AS n FROM meme_citations WHERE vod_id = 5709 OR clip_id = 483');
             assert.strictEqual(Number(bad), 0);
         });
 
-        await check('the candidate is hidden from the public API and a second run does not duplicate it', async () => {
-            const list = await t.get('/api/v1/entries');
-            assert.strictEqual(list.json().count, 0);
-            const one = await t.get('/api/v1/entries/robot-is-offline');
-            assert.strictEqual(one.status, 404);
+        await check('repeated phrases remain absent and a repeated known reference does not duplicate citations', async () => {
+            const list = await t.get('/api/v1/memes');
+            assert.strictEqual(list.json().count, 1);
+            const before = Number(await t.ctx.s.db.value("SELECT COUNT(*)::int AS n FROM meme_citations WHERE source_type IN ('chat_message','rundown_segment','vod')"));
             const again = await t.ctx.importer.runOnce();
             assert.strictEqual(again.created, 0);
-            assert.strictEqual(Number(await t.ctx.s.db.value("SELECT COUNT(*)::int AS n FROM meme_entries WHERE slug = 'robot-is-offline'")), 1);
-        });
-
-        await check('two ingests of the same phrase make one entry, whatever the case, spaces or punctuation', async () => {
-            const before = await t.ctx.s.db.maybe("SELECT * FROM meme_entries WHERE slug = 'robot-is-offline'");
-            const cite = (id) => ({
-                source_service: 'chat', source_type: 'chat_message', source_id: String(id), chat_message_id: id,
-                quote_text: 'robot is offline', observed_at: '2026-10-24T12:00:00.000Z', url: 'https://openvibe.chat/',
-            });
-            const first = await t.ctx.entries.upsertCandidate({
-                slug: 'robot-is-offline-two', title: '  ROBOT   is offline! ', kind: 'catchphrase',
-                visibility: 'hidden', first_seen_at: '2026-10-24T12:00:00.000Z', last_seen_at: '2026-10-24T12:00:00.000Z',
-                citations: [cite(9999)],
-            });
-            const second = await t.ctx.entries.upsertCandidate({
-                slug: 'robot-is-offline-three', title: 'robot is offline', kind: 'catchphrase',
-                visibility: 'hidden', first_seen_at: '2026-10-25T12:00:00.000Z', last_seen_at: '2026-10-25T12:00:00.000Z',
-                citations: [cite(10000)],
-            });
-            assert.strictEqual(first.created, false);
-            assert.strictEqual(second.created, false);
-            assert.strictEqual(first.entry.id, before.id);
-            assert.strictEqual(second.entry.id, before.id);
             assert.strictEqual(Number(await t.ctx.s.db.value("SELECT COUNT(*)::int AS n FROM meme_entries WHERE title_key = 'robot is offline'")), 1);
-            assert.strictEqual(Number(await t.ctx.s.db.value("SELECT COUNT(*)::int AS n FROM meme_citations WHERE source_id IN ('9999', '10000')")), 2);
+            assert.strictEqual(Number(await t.ctx.s.db.value("SELECT COUNT(*)::int AS n FROM meme_citations WHERE source_type IN ('chat_message','rundown_segment','vod')")), before);
         });
     } finally {
         await t.close();

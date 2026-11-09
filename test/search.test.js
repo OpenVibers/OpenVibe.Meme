@@ -14,7 +14,7 @@ const { boot, check, done } = require('./helpers/boot');
         const mod = t.network.addUser('mod', { role: 'global_mod' });
         const now = new Date().toISOString();
         const e = await t.ctx.entries.createCandidate({
-            slug: 'search-proof', title: 'Robot is offline', kind: 'catchphrase', summary: 'The robot is offline, again.', status: 'rising',
+            slug: 'search-proof', title: 'Robot is offline', kind: 'classic', scope: 'internet', summary: 'The robot is offline, again.', status: 'classic',
             first_seen_at: '2026-10-20T10:00:00Z', last_seen_at: now, visibility: 'hidden',
             citations: [
                 { role: 'origin', source_service: 'chat', source_type: 'chat_message', source_id: '1001', chat_message_id: 1001, quote_text: 'the robot is offline again', url: `${t.upstreams.url}/`, observed_at: '2026-10-20T10:00:00Z' },
@@ -42,8 +42,8 @@ const { boot, check, done } = require('./helpers/boot');
             assert.strictEqual(doc.canonical_url, 'https://openvibe.meme/m/search-proof');
             assert.strictEqual(doc.title, 'Robot is offline');
             assert.strictEqual(doc.revision, 2);
-            assert.strictEqual(doc.facets.kind, 'catchphrase');
-            assert.strictEqual(doc.facets.status, 'rising');
+            assert.strictEqual(doc.facets.kind, 'classic');
+            assert.strictEqual(doc.facets.status, 'classic');
             assert.deepStrictEqual(doc.facets.source.sort(), ['chat', 'live']);
             assert.strictEqual(doc.authorship, 'ai_assisted');
             assert.strictEqual(doc.provenance.length, 2);

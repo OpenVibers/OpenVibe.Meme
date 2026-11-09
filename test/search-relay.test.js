@@ -25,7 +25,7 @@ function fakeSearch() {
 
 async function makeEntry(t, slug) {
     return t.ctx.entries.createCandidate({
-        slug, title: 'Robot is offline', kind: 'catchphrase', summary: 'The robot is offline, again.', status: 'rising',
+        slug, title: 'Robot is offline', kind: 'classic', scope: 'internet', summary: 'The robot is offline, again.', status: 'classic',
         first_seen_at: '2026-10-20T10:00:00Z', last_seen_at: new Date().toISOString(), visibility: 'hidden',
         citations: [{ role: 'origin', source_service: 'chat', source_type: 'chat_message', source_id: '1001', chat_message_id: 1001, quote_text: 'the robot is offline again', url: `${t.upstreams.url}/`, observed_at: '2026-10-20T10:00:00Z' }],
     });
