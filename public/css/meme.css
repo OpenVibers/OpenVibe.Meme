@@ -143,6 +143,24 @@ html.ov-motion .mm-sticker { animation: mm-fan .7s cubic-bezier(.2,.9,.3,1.3) bo
 .mm-template small { color: var(--text-muted, #7386a3); font-size: .74rem; }
 .mm-template:has(input:checked), .mm-template.is-chosen { border-color: var(--room-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--room-accent) 18%, transparent); }
 .mm-template:has(input:focus-visible) { outline: 2px solid var(--room-accent); outline-offset: 2px; }
+.mm-editor-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; border: 1px solid var(--border, #1f2d47); border-radius: 14px; padding: 12px; }
+.mm-editor-tools legend { padding: 0 6px; font-weight: 750; }
+.mm-editor-tools .mm-field { min-width: 0; }
+.mm-form .mm-field[hidden] { display: none; }
+.mm-editor-tools input[type=color] { width: 100%; min-height: 44px; padding: 4px; }
+.mm-editor-stage { position: relative; width: 100%; aspect-ratio: 11 / 7; overflow: hidden; border-radius: 14px; background: #121827; touch-action: none; }
+.mm-editor-stage > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.mm-editor-box { position: absolute; display: grid; place-items: center; min-width: 28px; min-height: 26px; padding: 2px; border: 1px dashed transparent; border-radius: 5px; text-align: center; line-height: 1.05; font-weight: 950; text-transform: uppercase; overflow-wrap: anywhere; cursor: move; user-select: none; touch-action: none; paint-order: stroke fill; -webkit-text-stroke-linejoin: round; text-shadow: 0 1px 1px #0008; }
+.mm-editor-box:focus, .mm-editor-box:hover { border-color: color-mix(in srgb, var(--room-accent) 75%, white); }
+.mm-font-impact { font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif; letter-spacing: .015em; }
+.mm-font-modern { font-family: Inter, ui-sans-serif, system-ui, sans-serif; text-transform: none; font-weight: 800; }
+.mm-font-soft { font-family: ui-rounded, system-ui, sans-serif; text-transform: none; font-weight: 750; }
+.mm-resize-handle { position: absolute; right: -5px; bottom: -5px; width: 15px; height: 15px; border: 2px solid #fff; border-radius: 50%; background: var(--room-accent); cursor: nwse-resize; }
+.mm-editor-sticker { position: absolute; z-index: 2; transform: translate(-50%,-50%); font-size: clamp(22px, 7vw, 44px); filter: drop-shadow(0 2px 2px #000a); }
+.mm-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: 12px; }
+.mm-gallery figure { margin: 0; padding: 10px; border: 1px solid var(--border, #1f2d47); border-radius: 14px; background: var(--bg-card, #0f1729); }
+.mm-gallery img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 9px; }
+.mm-template-thumb { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 9px; }
 .mm-preview { position: sticky; top: 76px; }
 .mm-preview h2 { margin-bottom: 12px; }
 .mm-caption-card { position: relative; margin: 0; overflow: hidden; border-radius: 16px; background: #111; container-type: inline-size; box-shadow: 0 14px 34px rgba(0, 0, 0, .3); }
@@ -183,6 +201,7 @@ html.ov-motion .mm-demo-bars i { animation: mm-bar .9s cubic-bezier(.2,.7,.2,1) 
     .mm-make-grid > .mm-form { padding: 14px; }
     .mm-templates { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .mm-template { min-height: 44px; }
+    .mm-editor-tools { grid-template-columns: minmax(0, 1fr); }
     #mm-caption-form .mm-actions { position: static; padding: 8px 0; border: 0; background: transparent; }
     #mm-caption-form .mm-actions .mm-btn { min-height: 48px; flex: 1; }
 }
@@ -211,4 +230,29 @@ html[data-ov-motion=reduced] .mm-tree-lines path, html[data-ov-motion=reduced] .
     .table-wrap > table:has(thead th:nth-child(3)):has(td[data-label]) td:empty { display: none; }
 }
 
+/* The maker (Opus's design pass, 11-09): the words come first, the templates are one rail you scroll sideways with the
+   search and the upload above it, the style controls are a compact grid, and the canvas stays in view (sticky beside the
+   form on a computer, first on a phone). */
+.mm-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.mm-words { margin: 0; padding: 0; border: 0; display: grid; gap: 10px; }
+.mm-words legend, .mm-templates legend { margin-bottom: 8px; font-size: .95rem; font-weight: 800; color: var(--text-primary, #e6edf7); }
+.mm-tpl-h { margin: 8px 0 -2px; font-size: .95rem; font-weight: 800; color: var(--text-primary, #e6edf7); }
+.mm-tpl-bar { display: flex; gap: 8px; align-items: stretch; }
+.mm-tpl-find { flex: 1; }
+.mm-upload { position: relative; display: inline-flex; align-items: center; flex: none; min-height: 42px; padding: 0 14px; border-radius: 12px; border: 1px dashed var(--border, #1f2d47); color: var(--text-primary, #e6edf7); font-size: .85rem; font-weight: 700; cursor: pointer; }
+.mm-upload:hover, .mm-upload:focus-within { border-color: var(--room-accent); }
+.mm-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.mm-tpl-note { margin: -2px 0 0; }
+fieldset.mm-templates, fieldset.mm-words, fieldset.mm-editor-tools { min-inline-size: 0; min-width: 0; }
+.mm-make-grid > * { min-width: 0; }
+.mm-templates { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 10px; scrollbar-width: thin; }
+.mm-templates .mm-template { flex: 0 0 150px; scroll-snap-align: start; }
+@media (min-width: 900px) {
+  .mm-make-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); }
+  .mm-make-grid > .mm-preview { position: sticky; top: calc(var(--ovnav-h, 56px) + 16px); }
+}
+@media (max-width: 899.98px) {
+  .mm-make-grid { grid-template-columns: minmax(0, 1fr); }
+  .mm-make-grid > .mm-preview { order: -1; }
+}
 .mm-pics-source { max-width:100%; height:auto; display:block; margin-bottom:20px; }

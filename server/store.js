@@ -185,6 +185,7 @@ function wireTemplate(row) {
         ...(row.source_url ? { source_url: row.source_url } : {}),
         ...(row.attribution ? { attribution: row.attribution } : {}),
         ...(row.layout ? { layout: row.layout } : {}),
+        ...(row.moderation_status ? { moderation_status: row.moderation_status } : {}),
     };
 }
 
@@ -199,6 +200,7 @@ function wireCaption(row) {
         lines: Array.isArray(lines) ? lines.map(String) : [],
         created_at: iso(row.created_at),
         visibility: row.visibility,
+        ...(row.editor_state ? { editor: typeof row.editor_state === 'string' ? JSON.parse(row.editor_state) : row.editor_state } : {}),
     };
 }
 
@@ -1168,10 +1170,17 @@ function createStore(s, { search }) {
     }
 
     async function templates() {
-        return (await db.many('SELECT * FROM meme_templates ORDER BY box_count ASC, name ASC')).map(wireTemplate);
+        return (await db.many("SELECT * FROM meme_templates WHERE moderation_status = 'approved' ORDER BY box_count ASC, name ASC")).map(wireTemplate);
+    }
+    async function trendingTemplates(limit = 6) {
+        return (await db.many(`SELECT t.*, COUNT(c.id)::int AS uses_today FROM meme_templates t
+            LEFT JOIN meme_captions c ON c.template_id = t.id AND c.visibility = 'public'
+                AND c.created_at >= ((now() AT TIME ZONE 'UTC')::date::timestamp AT TIME ZONE 'UTC')
+            WHERE t.moderation_status = 'approved' GROUP BY t.id ORDER BY uses_today DESC, t.name ASC LIMIT $1`,
+        [Math.min(12, Math.max(1, Number(limit) || 6))])).map((row) => ({ ...wireTemplate(row), uses_today: Number(row.uses_today) || 0 }));
     }
     async function templateById(id) {
-        return wireTemplate(await db.maybe('SELECT * FROM meme_templates WHERE id = $1', [String(id || '')]));
+        return wireTemplate(await db.maybe("SELECT * FROM meme_templates WHERE id = $1 AND moderation_status = 'approved'", [String(id || '')]));
     }
 
     /**
@@ -1189,7 +1198,29 @@ function createStore(s, { search }) {
         return wireTemplate(row || await db.maybe('SELECT * FROM meme_templates WHERE id = $1', [String(id || '')]));
     }
 
-    async function createCaption({ subject, templateId, lines, visibility = 'public' }) {
+    async function submitTemplateUpload({ id, name, media_id, media_url, subject }) {
+        const safeId = String(id || '');
+        if (!/^tpl_upload_[0-9A-HJKMNP-TV-Z]{26}$/.test(safeId)) return refusal(400, 'meme.invalid', 'Invalid template id.');
+        const row = await db.maybe(
+            `INSERT INTO meme_templates (id, name, image_url, box_count, source, license, credit, source_url, attribution, moderation_status, uploaded_by)
+             VALUES ($1, $2, $3, 2, 'member upload', 'Member uploaded; approval required', $4, NULL, NULL, 'pending', $5) RETURNING *`,
+            [safeId, String(name || 'Member template').trim().slice(0, 80) || 'Member template', String(media_url || `https://openvibe.media/o/${encodeURIComponent(String(media_id || ''))}`), String(subject || '').slice(0, 180), subject],
+        );
+        return { ok: true, template: wireTemplate(row) };
+    }
+
+    async function pendingTemplateUploads(limit = 100) {
+        return (await db.many("SELECT * FROM meme_templates WHERE moderation_status = 'pending' ORDER BY created_at ASC LIMIT $1", [Math.min(200, Math.max(1, Number(limit) || 100))])).map(wireTemplate);
+    }
+
+    async function reviewTemplateUpload(id, decision) {
+        if (!['approved', 'rejected'].includes(decision)) return refusal(400, 'meme.invalid', 'decision must be approved or rejected.');
+        const row = await db.maybe("UPDATE meme_templates SET moderation_status = $2 WHERE id = $1 AND moderation_status = 'pending' RETURNING *", [String(id || ''), decision]);
+        if (!row) return refusal(404, 'meme.template_not_found', 'No pending template upload has that id.');
+        return { ok: true, template: wireTemplate(row) };
+    }
+
+    async function createCaption({ subject, templateId, lines, visibility = 'public', editor = {} }) {
         if (!CAPTION_VISIBILITIES.includes(visibility)) return refusal(400, 'meme.invalid', `visibility must be one of ${CAPTION_VISIBILITIES.join(', ')}`, 'visibility');
         const checked = captionLines(lines);
         if (!checked.ok) return checked;
@@ -1197,9 +1228,9 @@ function createStore(s, { search }) {
         if (!tpl) return refusal(404, 'meme.template_not_found', 'No such template.');
         const id = s.newId('mcp');
         const row = await db.maybe(
-            `INSERT INTO meme_captions (id, subject, template_id, lines, created_at, visibility)
-             VALUES ($1, $2, $3, $4::jsonb, now(), $5) RETURNING *`,
-            [id, subject, tpl.id, JSON.stringify(checked.lines), visibility],
+            `INSERT INTO meme_captions (id, subject, template_id, lines, created_at, visibility, editor_state)
+             VALUES ($1, $2, $3, $4::jsonb, now(), $5, $6::jsonb) RETURNING *`,
+            [id, subject, tpl.id, JSON.stringify(checked.lines), visibility, JSON.stringify(editor && typeof editor === 'object' ? editor : {})],
         );
         return { ok: true, caption: wireCaption(row) };
     }
@@ -1402,7 +1433,7 @@ function createStore(s, { search }) {
         list, trending, internetEntries, week, series, showcase, uniqueSlug,
         createCandidate, createEntry, upsertCandidate, addCitations, enrich, reindex, publish, hide, patch,
         createProposal, addRevision, reviewRevision, pendingRevisions,
-        templates, templateById, addTemplate, createCaption, captionById, captionCountForTemplate,
+        templates, trendingTemplates, templateById, addTemplate, submitTemplateUpload, pendingTemplateUploads, reviewTemplateUpload, createCaption, captionById, captionCountForTemplate,
         castVote, createReport, listOpenReports,
         saveJudgement, judgement, applyJudgement, logDecision, decisions, listHidden, unjudged,
         KINDS, STATUSES, VISIBILITIES, SCOPES, LABELS, MODERATION_STATES, BLOCKED_WORDS, MAX_LINES, MAX_LINE,

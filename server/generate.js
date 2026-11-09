@@ -33,7 +33,7 @@ function createGenerator({ config, s, entries, ai, media, fetchImpl = globalThis
     async function findTemplate(value) {
         const wanted = String(value || '').trim().toLowerCase();
         if (!wanted) return null;
-        const rows = await s.db.many('SELECT * FROM meme_templates ORDER BY box_count ASC, name ASC');
+        const rows = await s.db.many("SELECT * FROM meme_templates WHERE moderation_status = 'approved' ORDER BY box_count ASC, name ASC");
         return rows.find((r) => r.id.toLowerCase() === wanted || slugify(r.name) === wanted || r.name.toLowerCase() === wanted) || null;
     }
 
@@ -81,7 +81,7 @@ function createGenerator({ config, s, entries, ai, media, fetchImpl = globalThis
         ].filter(Boolean).join(' ');
         const context = [
             `Topic: ${subjectText || chosen.name}`,
-            chosen ? `Template: ${chosen.name} (${chosen.box_count} boxes)` : `Templates: ${(await s.db.many('SELECT id, name FROM meme_templates ORDER BY box_count ASC')).map((t) => `${t.id} ${t.name}`).join('; ')}`,
+            chosen ? `Template: ${chosen.name} (${chosen.box_count} boxes)` : `Templates: ${(await s.db.many("SELECT id, name FROM meme_templates WHERE moderation_status = 'approved' ORDER BY box_count ASC")).map((t) => `${t.id} ${t.name}`).join('; ')}`,
             evidence ? `Current uses and caption examples:\n${evidence}` : 'No current examples were found; keep the caption plain and format-native.',
             given ? `The person's lines: ${JSON.stringify(given)}` : '',
         ].filter(Boolean).join('\n').slice(0, 24_000);
@@ -90,7 +90,7 @@ function createGenerator({ config, s, entries, ai, media, fetchImpl = globalThis
         const data = extracted.output.data || {};
         if (!chosen) chosen = await findTemplate(data.template);
         if (!chosen) {
-            const first = await s.db.maybe('SELECT * FROM meme_templates ORDER BY box_count ASC, name ASC LIMIT 1');
+            const first = await s.db.maybe("SELECT * FROM meme_templates WHERE moderation_status = 'approved' ORDER BY box_count ASC, name ASC LIMIT 1");
             if (!first) return { ok: false, status: 503, code: 'meme.template_not_found', message: 'No meme templates are configured.' };
             chosen = first;
         }

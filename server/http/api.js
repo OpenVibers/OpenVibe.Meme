@@ -11,9 +11,14 @@
  *   GET    /week                                  this ISO week's candidates and vote counts
  *   POST   /week/vote                             one vote a week (signed in, same-origin)
  *   GET    /templates                             caption templates
- *   POST   /render                                render text lines to PNG without an AI call
- *   POST   /captions                              save a caption (signed in; text only)
+ *   POST   /caption-ideas                         cheap OpenVibe.AI caption suggestions (signed out, rate-limited)
+ *   POST   /templates/uploads                     submit a member template to Media for review
+ *   GET    /staff/templates/uploads               list pending member template uploads (staff)
+ *   POST   /staff/templates/:id/review            approve or reject a pending member template (staff)
+ *   POST   /render                                render a caption as PNG, GIF, or MP4 without an AI call
+ *   POST   /captions                              save text and editor state (signed in)
  *   GET    /captions/:id                          one saved caption
+ *   GET    /captions/:id/render                   render a saved caption as PNG, GIF, or MP4
  *   POST   /entries/:slug/report                  a takedown/correction report (signed in)
  *   GET    /reports                               open reports (staff)
  *   GET    /staff/candidates                      the hidden candidates with the judge's score (staff)
@@ -31,15 +36,48 @@ const { sameOrigin } = require('./principal');
 const { isStaff } = require('../identity/staff');
 const { currentWeek } = require('../week');
 const { KINDS, STATUSES, SCOPES, LABELS, captionLines } = require('../store');
-const { renderMeme } = require('../render-png');
+const { renderMeme, fallbackLayout } = require('../render-png');
+const { renderStillVideo } = require('../render/video');
+const sharp = require('sharp');
+
+function renderOptions(template, editor) {
+    if (!editor || typeof editor !== 'object') return { ok: true, layout: null, stickers: [], crop: null };
+    const hex = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value) : fallback;
+    const size = Math.min(64, Math.max(10, Number(editor.font_size) || 30));
+    const outlineWidth = Math.min(8, Math.max(0, Number(editor.outline_width) || 0));
+    const style = ['impact', 'modern', 'soft'].includes(editor.font_style) ? editor.font_style : 'impact';
+    const permitted = new Set(['✨', '😂', '🔥', '💀', '👀', '❤️', '🙌']);
+    const stickers = Array.isArray(editor.stickers) ? editor.stickers.slice(0, 8).filter((x) => x && permitted.has(x.emoji) && Number.isFinite(Number(x.x)) && Number.isFinite(Number(x.y)) && Number(x.x) >= 0 && Number(x.x) <= 100 && Number(x.y) >= 0 && Number(x.y) <= 100).map((x) => ({ emoji: x.emoji, x: Number(x.x), y: Number(x.y), size: 34 })) : [];
+    let crop = null;
+    if (editor.crop_x != null || editor.crop_y != null) {
+        crop = { x: editor.crop_x == null ? 50 : Number(editor.crop_x), y: editor.crop_y == null ? 50 : Number(editor.crop_y) };
+        if (!Number.isFinite(crop.x) || crop.x < 0 || crop.x > 100 || !Number.isFinite(crop.y) || crop.y < 0 || crop.y > 100) return { ok: false, message: 'crop position must be from 0 to 100' };
+    }
+    const inputBoxes = Array.isArray(editor.boxes) ? editor.boxes : [];
+    // Style, stickers and crop alone are a valid edit of the template's own layout.
+    if (!inputBoxes.length) return { ok: true, layout: null, stickers, crop };
+    if (inputBoxes.length > 4) return { ok: false, message: 'editor layout is invalid for this template' };
+    const base = template.layout && typeof template.layout === 'object' && Array.isArray(template.layout.boxes) && template.layout.boxes.length
+        ? template.layout : fallbackLayout(template.box_count);
+    const width = Number(base.width) || 440, height = Number(base.height) || 280;
+    const boxes = inputBoxes.map((box, index) => {
+        const p = ['x', 'y', 'w', 'h'].map((key) => Number(box && box[key]));
+        if (p.some((n) => !Number.isFinite(n)) || p[0] < 0 || p[1] < 0 || p[2] < 12 || p[3] < 8 || p[0] + p[2] > 100 || p[1] + p[3] > 100) return null;
+        return { ...(base.boxes[index] || base.boxes[base.boxes.length - 1]), x: p[0] / 100 * width, y: p[1] / 100 * height, w: p[2] / 100 * width, h: p[3] / 100 * height,
+            font: 'DejaVuSans-Bold', size, color: hex(editor.color, '#ffffff'), outline: hex(editor.outline, '#000000'), outline_width: outlineWidth,
+            uppercase: style === 'impact', align: 'center', valign: 'middle', wrap: true };
+    });
+    if (boxes.some((box) => !box)) return { ok: false, message: 'editor text boxes must stay within the canvas' };
+    return { ok: true, layout: { width, height, boxes }, stickers, crop };
+}
 
 function createApi(ctx) {
-    const { config, s, principal, entries, trends, analyzer, research, generator } = ctx;
+    const { config, s, principal, entries, trends, analyzer, research, generator, generateAi, media } = ctx;
     const r = asyncRouter();
     // Each person's daily share of the AI features (analyze, research, generate), on top of each one's budget for all.
     const personCap = require('../person-cap').createPersonCap({ config, s });
 
-    r.use(express.json({ limit: '64kb' }));
+    r.use(express.json({ limit: '9mb' }));
     r.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
     r.use(principal.middleware);
 
@@ -221,7 +259,55 @@ function createApi(ctx) {
         return res.json({ count: counted.length, templates: counted });
     });
 
-    // Render user-supplied lines as PNG with the same licensed template and bundled fonts as the maker.
+    r.post('/caption-ideas', async (req, res) => {
+        const ip = String(req.ip || 'unknown').slice(0, 80);
+        if (!windowCount(`caption-ideas-day:${ip}`, 86_400_000, 60)) return problem(res, 429, 'meme.rate_limited', 'The daily caption-idea limit is used up; try again tomorrow.');
+        if (!windowCount(`caption-ideas:${ip}`, 60_000, 8)) return problem(res, 429, 'meme.rate_limited', 'Too many caption requests. Try again in a minute.');
+        const b = req.body && typeof req.body === 'object' ? req.body : {};
+        const template = typeof b.template_id === 'string' ? await entries.templateById(b.template_id) : null;
+        const format = String((template && template.name) || b.format || '').trim().slice(0, 120);
+        const topic = String(b.topic || '').trim().slice(0, 300);
+        if (!format || !topic) return invalid(res, 'choose a template and enter a topic or situation');
+        if (!generateAi || !generateAi.run) return problem(res, 503, 'meme.ai_unavailable', 'OpenVibe.AI caption ideas are not configured.');
+        const result = await generateAi.run('meme.caption', { format, topic }, { calls: 1 });
+        if (!result.ok) return problem(res, result.status || 502, result.code || 'meme.ai_failed', result.message || 'Caption ideas are unavailable.');
+        const raw = result.output && (result.output.ideas || result.output.output && result.output.output.ideas);
+        const ideas = (Array.isArray(raw) ? raw : []).slice(0, 5).map((idea) => String(idea || '').split(/\r?\n/).map((line) => line.replace(/\s+/g, ' ').trim().slice(0, 120)).filter(Boolean).slice(0, 4)).filter((idea) => idea.length && captionLines(idea).ok);
+        if (!ideas.length) return problem(res, 502, 'meme.ai_bad_answer', 'OpenVibe.AI returned no usable captions.');
+        res.set('Cache-Control', 'private, no-store');
+        return res.json({ ideas, cost_usd: Number(result.costUsd) || 0, objective: 'cheapest' });
+    });
+
+    r.post('/templates/uploads', requirePerson, async (req, res) => {
+        const b = req.body && typeof req.body === 'object' ? req.body : {};
+        const match = typeof b.image === 'string' && b.image.match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/);
+        if (!match) return invalid(res, 'image must be a PNG, JPEG, or WebP data URL');
+        const bytes = Buffer.from(match[2], 'base64');
+        if (!bytes.length || bytes.length > 6 * 1024 * 1024 || bytes.toString('base64').replace(/=+$/, '') !== match[2].replace(/=+$/, '')) return invalid(res, 'image must be at most 6 MB');
+        let meta;
+        try { meta = await sharp(bytes, { limitInputPixels: 16_000_000 }).metadata(); } catch { return invalid(res, 'image file could not be decoded'); }
+        if (meta.format !== match[1].slice(6) || !meta.width || !meta.height || meta.width < 128 || meta.height < 96) return invalid(res, 'image must be at least 128 by 96 pixels and match its file type');
+        if (!media || !media.upload) return problem(res, 503, 'meme.media_unavailable', 'OpenVibe.Media uploads are not configured.');
+        const uploaded = await media.upload(bytes, { mimeType: match[1], filename: 'member-meme-template', metadata: { purpose: 'meme-template-review' } });
+        if (!uploaded || !uploaded.media_id) return problem(res, 503, 'meme.media_unavailable', 'The image could not be stored in OpenVibe.Media.');
+        const out = await entries.submitTemplateUpload({ id: `tpl_upload_${s.newId('mcp').slice(-26)}`, name: typeof b.name === 'string' ? b.name : 'Member template', media_id: uploaded.media_id, media_url: uploaded.url, subject: req.principal.subject });
+        if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'Upload could not be submitted.');
+        return res.status(202).json({ template: out.template, review_status: 'pending', message: 'Your template is in the moderation queue.' });
+    });
+
+    r.get('/staff/templates/uploads', requirePerson, async (req, res) => {
+        if (!isStaff(req.principal)) return problem(res, 403, 'meme.forbidden', 'Staff access is required.');
+        return res.json({ templates: await entries.pendingTemplateUploads() });
+    });
+    r.post('/staff/templates/:id/review', requirePerson, async (req, res) => {
+        if (!isStaff(req.principal)) return problem(res, 403, 'meme.forbidden', 'Staff access is required.');
+        const decision = req.body && req.body.decision;
+        const out = await entries.reviewTemplateUpload(String(req.params.id || ''), decision);
+        if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'Template could not be reviewed.');
+        return res.json(out);
+    });
+
+    // Render user-supplied lines as PNG, GIF, or MP4 with the same licensed template and bundled fonts as the maker.
     // This path is deterministic and does not spend the AI research/generation budget.
     const sameSiteWrite = (req, res, next) => sameOrigin(req, config.baseUrl) ? next() : problem(res, 403, 'meme.cross_site', 'A write must come from OpenVibe.Meme.');
     r.get('/pics/:slug/preview', requirePerson, async (req, res) => {
@@ -243,6 +329,7 @@ function createApi(ctx) {
 
     r.post('/render', requirePerson, async (req, res) => {
         const body = req.body && typeof req.body === 'object' ? req.body : {};
+        const format = ['png', 'gif', 'mp4'].includes(body.format) ? body.format : 'png';
         const checked = captionLines(body.lines);
         if (!checked.ok) return problem(res, checked.status || 400, checked.code || 'meme.invalid', checked.message || 'Invalid caption lines.');
         const templateId = typeof body.template_id === 'string' ? body.template_id.trim() : '';
@@ -250,12 +337,34 @@ function createApi(ctx) {
         const template = await entries.templateById(templateId);
         if (!template) return problem(res, 404, 'meme.template_not_found', 'No such template.');
         try {
-            const rendered = await renderMeme({ template, lines: checked.lines, maxPixels: 1600 });
+            const opts = renderOptions(template, body.editor);
+            if (!opts.ok) return invalid(res, opts.message);
+            const rendered = await renderMeme({ template, lines: checked.lines, ...opts, maxPixels: 1600 });
+            const bytes = format === 'png' ? rendered.png : await renderStillVideo(rendered.png, format);
+            const type = format === 'png' ? 'image/png' : format === 'gif' ? 'image/gif' : 'video/mp4';
             res.set({ 'Cache-Control': 'private, no-store', 'X-Image-Width': String(rendered.width), 'X-Image-Height': String(rendered.height) });
-            return res.type('png').send(rendered.png);
+            return res.type(type).send(bytes);
         } catch (err) {
             return problem(res, 422, 'meme.render_failed', 'This template could not be rendered right now.');
         }
+    });
+
+    r.get('/captions/:id/render', async (req, res) => {
+        const row = await entries.captionById(String(req.params.id || ''));
+        if (!row) return problem(res, 404, 'meme.not_found', 'No such caption.');
+        const mine = req.principal.kind === 'user' && req.principal.subject === row.subject;
+        if (row.visibility !== 'public' && !mine && !isStaff(req.principal)) return problem(res, 404, 'meme.not_found', 'No such caption.');
+        const format = ['png', 'gif', 'mp4'].includes(req.query.format) ? req.query.format : 'png';
+        const template = await entries.templateById(row.template_id);
+        if (!template) return problem(res, 404, 'meme.template_not_found', 'No such template.');
+        try {
+            const opts = renderOptions(template, row.editor);
+            if (!opts.ok) return problem(res, 422, 'meme.render_failed', 'This caption has invalid editor settings.');
+            const rendered = await renderMeme({ template, lines: row.lines, ...opts, maxPixels: 1600 });
+            const bytes = format === 'png' ? rendered.png : await renderStillVideo(rendered.png, format);
+            res.set('Cache-Control', row.visibility === 'public' ? 'public, max-age=60' : 'private, no-store');
+            return res.type(format === 'png' ? 'image/png' : format === 'gif' ? 'image/gif' : 'video/mp4').send(bytes);
+        } catch { return problem(res, 422, 'meme.render_failed', 'This caption could not be rendered right now.'); }
     });
 
     r.get('/captions/:id', async (req, res) => {
@@ -370,11 +479,14 @@ function createApi(ctx) {
 
     r.post('/captions', requirePerson, async (req, res) => {
         const b = req.body && typeof req.body === 'object' ? req.body : {};
+        const editor = b.editor && typeof b.editor === 'object' && !Array.isArray(b.editor) ? b.editor : {};
+        if (Buffer.byteLength(JSON.stringify(editor)) > 8192) return invalid(res, 'editor state is too large');
         const out = await entries.createCaption({
             subject: req.principal.subject,
             templateId: b.template_id,
             lines: b.lines,
             visibility: b.visibility == null ? 'public' : String(b.visibility),
+            editor,
         });
         if (!out.ok) return problem(res, out.status || 400, out.code || 'meme.invalid', out.message || 'invalid caption');
         res.set('Location', `/api/v1/captions/${out.caption.id}`);

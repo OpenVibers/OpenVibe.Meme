@@ -44,6 +44,8 @@ const MEDIA = (n) => `med_01JAB2C3D4E5F6G7H8J9K0MNP${n}`;
             const d = await t.get('/api/v1/entries/doge');
             assert.strictEqual(d.status, 200, d.text);
             const e = d.json();
+            const entryContract = contracts.validate('meme.entry@1', e);
+            assert.strictEqual(entryContract.valid, true, JSON.stringify(entryContract.errors));
             assert.strictEqual(e.web_origin.url, origin.url);
             assert.strictEqual(e.spread.length, 1);
             assert.strictEqual(e.spread[0].count, 420);
