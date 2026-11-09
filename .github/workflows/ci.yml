@@ -9,6 +9,8 @@ jobs:
     uses: OpenVibers/OpenVibe.Shared/.github/workflows/test.yml@423fe519b5fe9594cc81b670e5ba5cb9f21f6176
     with:
       syntax-dirs: server test scripts
+      # The maker's GIF and MP4 exports call the system ffmpeg.
+      apt-packages: ffmpeg
       # ADR-035: PostgreSQL 18 + PgBouncer (transaction mode) + Valkey 9 containers (openvibe-sdk
       # scripts/test-services.sh). npm test runs every file on PGlite; test:pg runs them all through PgBouncer.
       test: 'eval "$(node_modules/openvibe-sdk/scripts/test-services.sh up)" && npm test && npm run test:pg'

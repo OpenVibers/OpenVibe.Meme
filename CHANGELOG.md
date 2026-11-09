@@ -4,6 +4,13 @@ What changed in OpenVibe.Meme, newest first.
 
 ## Unreleased
 
+- **The maker, second slice.** `/make` is a phone-first editor: template search, draggable and resizable caption
+  boxes, crop and type/outline controls, emoji stickers, optional signed-out caption ideas from OpenVibe.AI's cheapest
+  route, and PNG/GIF/MP4 downloads. Captions save their editor state as text and geometry, never as a rendered image.
+  Member-uploaded templates go to OpenVibe.Media and stay hidden until staff approve them; migration 0010 adds the
+  moderation and editor-state columns above 0009. Public templates, entries and the render request are checked against
+  `meme.template@1`, `meme.entry@1` and `meme.render@1` (contracts v0.373.0). Saved captions gain copy/native share,
+  Community, Pics and Chat links, and a render endpoint.
 - **One title, one public entry.** `meme_entries.title_key` is the title lowercased with quotes/punctuation stripped
   and whitespace collapsed; a trigger keeps it current and a partial unique index on `(kind, title_key)` stops two
   public entries sharing a title. The importer upserts on the key instead of the slug, so a second phrase that the

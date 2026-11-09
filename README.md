@@ -162,9 +162,13 @@ also gets per-actor minute/hour limits (`MEME_LIMITS_MINUTE`, `MEME_LIMITS_HOUR`
 | `GET /week` | this ISO week's candidates (public entries with a live use that week) and their vote counts |
 | `POST /week/vote` | signed in, same-origin; `{ entry_id }`; upsert per (`week`, subject) — one vote a week |
 | `GET /templates` | the caption templates with their caption counts and `layout` |
-| `POST /render` | signed in; `{ template_id, lines }` returns a PNG from the local renderer without an AI call |
+| `POST /caption-ideas` | signed out or signed in; `{ template_id, topic }` returns short ideas using OpenVibe.AI's cheapest route by default (8 requests/minute/address) |
+| `POST /templates/uploads` | signed in; `{ name, image }` accepts PNG/JPEG/WebP up to 6 MB and sends it to Media in the pending review queue |
+| `GET /staff/templates/uploads`, `POST /staff/templates/:id/review` | staff-only template moderation queue and approval/rejection |
+| `POST /render` | signed in; `{ template_id, lines, format?, editor? }` returns PNG, GIF, or MP4 from the local renderer without an AI call |
+| `GET /captions/:id/render?format=png\|gif\|mp4` | render a public saved caption in the requested format; private captions require the owner or staff |
 | `POST /generate` | signed in; `{ template_slug \| topic, lines? }`; researches current uses, writes captions, renders the template's layout as a PNG, stores it in Media and saves the caption. 201 returns `media_id`, `media_url`, `captions`, `template`, `labels`, `caption`; 503 `meme.ai_unavailable`/`meme.media_unavailable`; 429 `meme.ai_budget` |
-| `POST /captions` | signed in; `{ template_id, lines, visibility? }`, 1–4 lines × 120 chars, blocked words refused |
+| `POST /captions` | signed in; `{ template_id, lines, visibility?, editor? }`, 1–4 lines × 120 chars, blocked words refused; safe editor geometry is saved with the text |
 | `GET /captions/:id` | one caption; a public read never returns the author's subject |
 | `POST /entries/:slug/report` | signed in; `{ kind: "takedown"\|"correction", reason, note? }`, stored for staff |
 | `GET /reports` | staff: the open reports |
@@ -325,14 +329,15 @@ signed-in person is `private, no-store`.
 | `/memes` | permanent redirect to the internet-meme collection |
 | `/m/:slug` | one entry: origin with its citation link, the use timeline, examples, and a report form when signed in |
 | `/week` | the ballot (`POST /week/vote`) |
-| `/make` | the generator form: template, 1–4 lines, a server-rendered preview (`GET /make`), save (`POST /make` → 303 `/c/:id`) |
-| `/c/:id` | one saved caption, the lines over the template image |
+| `/make` | phone-first editor: searchable templates, movable/resizable text, crop, type/outline style, stickers, AI ideas, and PNG/GIF/MP4 export; saves captions as text and editor state |
+| `/c/:id` | one saved caption, native share/copy, Community draft, Pics/Chat links, and downloadable exports |
 | `/developers` | the API, the Search document, the importer's sources |
 | 404 | the not-found page |
 
 The pages remain server-rendered and readable without JavaScript; `public/js/meme.js` makes the caption preview
-update as the user types. The templates' images are local data-free SVG placeholders (or an
-`openvibe.media` object when staff add a real one). `robots.txt`, `sitemap.xml`, `llms.txt` and `llms-full.txt` list
+update as the user types and adds touch dragging/resizing. Template uploads go to OpenVibe.Media and remain hidden
+until a staff member approves them. GIF and MP4 exports are short loops of the rendered image. The templates' images
+are local data-free SVG placeholders (or a licensed Commons / member `openvibe.media` object). `robots.txt`, `sitemap.xml`, `llms.txt` and `llms-full.txt` list
 the public pages and every public entry.
 
 ## The first proof
@@ -381,7 +386,7 @@ forms zone for the POST routes). Not deployed by this change.
 AGPL-3.0-only. See [LICENSE](LICENSE).
 
 <!-- versions:start -->
-- openvibe-contracts: v0.338.0
+- openvibe-contracts: v0.373.0
 - openvibe-sdk: v0.123.0
 - openvibe-shared: v4.173.0
 - openvibe-publishing: v1.5.0

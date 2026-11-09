@@ -78,7 +78,7 @@ function createAnalyzer({ config, s, ai, reddit = null, fetchImpl = globalThis.f
     async function matchTemplate(name) {
         const wanted = tokensOf(name);
         if (!wanted.length) return null;
-        const rows = await s.db.many('SELECT * FROM meme_templates ORDER BY box_count ASC, name ASC');
+        const rows = await s.db.many("SELECT * FROM meme_templates WHERE moderation_status = 'approved' ORDER BY box_count ASC, name ASC");
         let best = null;
         let bestHits = 0;
         for (const row of rows) {
@@ -132,7 +132,7 @@ function createAnalyzer({ config, s, ai, reddit = null, fetchImpl = globalThis.f
         }
 
         const matched = await matchEntries(title || (inputUrl || '').replace(/[^a-zA-Z0-9]+/g, ' '));
-        const known = await s.db.many('SELECT name FROM meme_templates ORDER BY box_count ASC, name ASC LIMIT 20');
+        const known = await s.db.many("SELECT name FROM meme_templates WHERE moderation_status = 'approved' ORDER BY box_count ASC, name ASC LIMIT 20");
 
         // Two calls: vision, then one structured extraction. Reserve both before the first, so a full day refuses
         // the request before any cost is incurred.

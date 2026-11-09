@@ -21,13 +21,13 @@ function createAgentPages(ctx) {
 
     async function home() {
         const { week } = currentWeek(s.now());
-        const [trendResult, weekOut, c] = await Promise.all([entries.list({ limit: 8, scope: 'internet', sort: 'top', window: 'week' }), entries.week({ week }), counts()]);
+        const [trendResult, weekOut, c, templatesToday] = await Promise.all([entries.list({ limit: 8, scope: 'internet', sort: 'top', window: 'week' }), entries.week({ week }), counts(), entries.trendingTemplates(6)]);
         const trending = trendResult.entries || [];
         return page('/', {
             index: true, title: null,
-            description: 'Explore an open meme encyclopedia: learn what memes mean, trace their origins and variations, and make your own with reusable templates.',
+            description: 'Explore an open meme encyclopedia with cited origins and remixes; make a meme with draggable text, stickers, AI caption ideas, and PNG/GIF/MP4 downloads.',
             jsonLd: homeJsonLd(config),
-            body: raw(views.home({ trending, week: weekOut, counts: c })),
+            body: raw(views.home({ trending, week: weekOut, counts: c, templatesToday })),
         });
     }
 
@@ -35,12 +35,13 @@ function createAgentPages(ctx) {
         const templates = await entries.templates();
         const values = { template_id: query.get('template_id') || '', visibility: query.get('visibility') || 'public' };
         for (const i of [1, 2, 3, 4]) values[`line${i}`] = String(query.get(`line${i}`) || '').slice(0, 120);
-        const chosen = templates.find((t) => t.id === values.template_id) || templates[0] || null;
+        const initial = templates.find((t) => t.id === 'tpl_classic') || templates.find((t) => Number(t.box_count) >= 2) || templates[0] || null;
+        const chosen = templates.find((t) => t.id === values.template_id) || initial;
         const previewLines = [1, 2, 3, 4].map((i) => String(values[`line${i}`] || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
         const preview = chosen && previewLines.length ? { template: chosen, lines: previewLines } : null;
         return page('/make', {
             index: true, title: 'Make a meme',
-            description: 'Choose a reusable meme template, write a caption, preview as you type, and save an editable link or export a PNG.',
+            description: 'Make a meme with movable text, crop and style controls, emoji stickers, optional AI caption ideas, and PNG/GIF/MP4 export.',
             body: raw(views.make({ templates, values: { ...values, template_id: chosen ? chosen.id : '' }, preview, signedIn: false, problem: null })),
         });
     }
@@ -55,7 +56,7 @@ function createAgentPages(ctx) {
             const result = await entries.list({ ...filters, limit: 50 });
             const title = filters.q ? `Search: ${filters.q}` : 'Explore internet memes';
             return page('/browse', { index: !filters.q && !result.error, title,
-                description: 'Search an open meme encyclopedia with researched origins, spread, variations, and reusable templates.',
+                description: 'Search an open meme encyclopedia with researched origins, spread, variations, community examples, and reusable templates.',
                 jsonLd: [seo.jsonLd.webPage({ name: title, url: `${base()}/browse`, description: 'Explore researched internet memes and formats.', siteUrl: base() })],
                 body: raw(views.browse({ entries: result.error ? [] : result.entries, filters, error: result.error || null })) });
         }
@@ -83,8 +84,8 @@ function createAgentPages(ctx) {
             try { slug = decodeURIComponent(entryMatch[1]); } catch { return null; }
             const row = await entries.bySlug(slug);
             if (!row || row.visibility !== 'public' || row.scope !== 'internet') return null;
-            const citations = await entries.citations(row.id);
-            const e = entries.wireEntry(row);
+            const e = await entries.detail(row);
+            const citations = e.citations;
             return page(p, {
                 index: true, title: e.title,
                 description: (e.summary || `${e.title} on OpenVibe.Meme`).slice(0, 160),

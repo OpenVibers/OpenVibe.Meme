@@ -119,8 +119,8 @@ async function backgroundOf(template, { fetchImpl = globalThis.fetch, timeoutMs 
 }
 
 /** → { png, width, height, lines } */
-async function renderMeme({ template, lines = [], fetchImpl = globalThis.fetch, maxPixels = 1600 } = {}) {
-    const layout = template && template.layout && typeof template.layout === 'object' ? template.layout : fallbackLayout(template ? template.box_count : 1);
+async function renderMeme({ template, lines = [], layout: requestedLayout = null, stickers = [], crop = null, fetchImpl = globalThis.fetch, maxPixels = 1600 } = {}) {
+    const layout = requestedLayout || (template && template.layout && typeof template.layout === 'object' ? template.layout : fallbackLayout(template ? template.box_count : 1));
     const width = Math.min(maxPixels, Math.max(64, Number(layout.width) || 440));
     const height = Math.max(64, Math.round(width * ((Number(layout.height) || 280) / (Number(layout.width) || 440))));
     const scaled = { ...layout, width, height, boxes: (layout.boxes || []).map((b) => ({
@@ -132,9 +132,26 @@ async function renderMeme({ template, lines = [], fetchImpl = globalThis.fetch, 
         size: (Number(b.size) || 24) * (width / (Number(layout.width) || 440)),
     })) };
     const background = await backgroundOf(template, { fetchImpl });
-    const base = await sharp(background, { density: 144 }).resize(width, height, { fit: 'fill' }).png().toBuffer();
-    const overlay = Buffer.from(textSvg(scaled, lines));
-    const png = await sharp(base).composite([{ input: overlay, top: 0, left: 0 }]).png().toBuffer();
+    const source = sharp(background, { density: 144 }), meta = await source.metadata();
+    const aspect = width / height;
+    const cropX = crop && Number.isFinite(Number(crop.x)) ? Math.min(100, Math.max(0, Number(crop.x))) : 50;
+    const cropY = crop && Number.isFinite(Number(crop.y)) ? Math.min(100, Math.max(0, Number(crop.y))) : 50;
+    let left = 0, top = 0, cropWidth = meta.width, cropHeight = meta.height;
+    if (meta.width / meta.height > aspect) {
+        cropWidth = Math.max(1, Math.round(meta.height * aspect));
+        left = Math.round((meta.width - cropWidth) * cropX / 100);
+    } else {
+        cropHeight = Math.max(1, Math.round(meta.width / aspect));
+        top = Math.round((meta.height - cropHeight) * cropY / 100);
+    }
+    const base = await source.extract({ left, top, width: cropWidth, height: cropHeight }).resize(width, height).png().toBuffer();
+    const overlays = [{ input: Buffer.from(textSvg(scaled, lines)), top: 0, left: 0 }];
+    if (Array.isArray(stickers) && stickers.length) {
+        const safe = stickers.slice(0, 8).filter((s) => s && ['✨', '😂', '🔥', '💀', '👀', '❤️', '🙌'].includes(s.emoji) && Number.isFinite(Number(s.x)) && Number.isFinite(Number(s.y)));
+        const marks = safe.map((s) => `<text x="${Math.max(0, Math.min(100, Number(s.x))) * width / 100}" y="${Math.max(0, Math.min(100, Number(s.y))) * height / 100}" font-family="DejaVu Sans" font-size="${Math.max(18, Math.min(56, Number(s.size) || 34))}" text-anchor="middle">${escapeXml(s.emoji)}</text>`).join('');
+        if (marks) overlays.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${marks}</svg>`), top: 0, left: 0 });
+    }
+    const png = await sharp(base).composite(overlays).png().toBuffer();
     return { png, width, height, lines: (scaled.boxes || []).length };
 }
 

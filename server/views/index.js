@@ -103,7 +103,7 @@ function homeRise(feature) {
     return `<div class="mm-demo-rise"><span class="mm-status mm-status-${esc(feature.entry.status)}">${esc(STATUS_LABEL[feature.entry.status] || feature.entry.status)}</span><span class="mm-demo-bars">${bars}</span><small>uses per day, last ${rows.length} days · <a href="/m/${esc(feature.entry.slug)}">${esc(feature.entry.title)}</a></small></div>`;
 }
 
-function home({ trending = [], week = null, counts = {}, feature = null } = {}) {
+function home({ trending = [], week = null, counts = {}, feature = null, templatesToday = [] } = {}) {
     const candidates = week ? week.candidates.slice(0, 3) : [];
     // Real first (the owner, 10-31: empty sections made the rooms look unfinished). Trending and the week's teaser show only
     // when they have entries; while neither does, one short "be the first" row sits below the scenes instead.
@@ -115,19 +115,20 @@ function home({ trending = [], week = null, counts = {}, feature = null } = {}) 
 <div class="mm-head-row"><h2 id="mm-week-teaser-h">Meme of the week</h2><a class="mm-more" href="/week">The ballot${kit.icon('chevron')}</a></div>
 <ol class="mm-entries mm-entries-week">${candidates.map(card).join('')}</ol>
 </section>` : '';
+    const templateSec = templatesToday.length ? `<section class="mm-section mm-template-today" aria-labelledby="mm-template-today-h"><div class="mm-head-row"><h2 id="mm-template-today-h">Templates to try today</h2><a class="mm-more" href="/make">Make one${kit.icon('chevron')}</a></div><ol class="mm-entries">${templatesToday.slice(0, 6).map((t) => `<li class="mm-entry-card"><a class="mm-entry-link" href="/make?template_id=${encodeURIComponent(t.id)}"><img class="mm-template-thumb" src="${esc(t.image_url)}" alt="" loading="lazy"><span class="mm-entry-title">${esc(t.name)}</span><span class="mm-entry-meta">${Number(t.uses_today) || 0} captions today · ${esc(t.license)}</span></a></li>`).join('')}</ol></section>` : '';
     const firsts = [
         !trending.length && ['Start with a classic', 'Browse the internet meme encyclopedia and follow a format from its first trace to its latest variations.', '/browse?scope=internet', 'Explore internet memes'],
         !candidates.length && ['Make a meme', 'Choose a reusable template, write a caption, and export a PNG or save a remixable link.', '/make', 'Open the meme maker'],
     ].filter(Boolean);
     const beFirst = firsts.length ? `<section class="mm-section mm-first" aria-labelledby="mm-first-h"><h2 id="mm-first-h">Be the first</h2><ul class="mm-first-list">${firsts.map(([title, text, href, label]) => `<li><b>${esc(title)}</b><span>${esc(text)}</span><a href="${esc(href)}">${esc(label)}</a></li>`).join('')}</ul></section>` : '';
-    const live = `${trendingSec}${weekSec}`;
+    const live = `${trendingSec}${weekSec}${templateSec}`;
     const room = sc.room({
         room: 'meme',
         hero: {
             title: 'Know the meme. Make it yours.',
             lede: 'An open encyclopedia of internet memes: what each one means, where it began, how it spread, and the formats people still remix.',
-            start: { href: '/browse', label: 'Explore the meme library' },
-            chips: [{ label: 'Make a meme', href: '/make' }, ...(trending.length ? [{ label: 'Trending', href: '#mm-trending' }] : []), { label: 'The API', href: '/developers' }],
+            start: { href: '/make', label: 'Make a meme' },
+            chips: [{ label: 'Explore memes', href: '/browse?scope=internet' }, ...(trending.length ? [{ label: 'Trending', href: '#mm-trending' }] : []), { label: 'The API', href: '/developers' }],
             proof: Number(counts.entries) ? [{ value: Number(counts.entries), label: Number(counts.entries) === 1 ? 'entry' : 'entries' }] : [],
             motif: treeMotif(feature),
         },
@@ -163,6 +164,8 @@ function entry({ e, citations = [], signedIn = false, staff = false, reported = 
     const uses = citations.filter((c) => c !== origin);
     const examples = citations.filter((c) => c.role === 'example');
     const others = uses.filter((c) => c.role !== 'example');
+    const liveUses = citations.filter((c) => c.source_service === 'live');
+    const mediaExamples = Array.isArray(e.examples) ? e.examples.filter((x) => x && x.media_id) : [];
     return `<div class="mm-wrap" id="mm-entry" data-entry="${esc(e.slug)}">
 <article class="mm-entry">
 <header class="mm-entry-h">
@@ -179,7 +182,7 @@ ${e.summary ? `<p class="mm-summary">${esc(e.summary)}${share && share.url ? ' '
 
 <section class="mm-origin" id="mm-origin" aria-labelledby="mm-origin-h">
 <h2 id="mm-origin-h">Where it started</h2>
-${origin ? citation(origin) : '<p class="mm-muted">No origin citation is attached yet.</p>'}
+${origin ? citation(origin) : (e.origin && e.origin.url ? `<p class="mm-origin-source"><a href="${esc(e.origin.url)}" rel="nofollow noopener">${esc(e.origin.title || e.origin.url)}</a>${e.origin.publisher ? ` · ${esc(e.origin.publisher)}` : ''}${e.origin.published_at ? ` · <time datetime="${esc(e.origin.published_at)}">${esc(String(e.origin.published_at).slice(0, 10))}</time>` : ''}${e.origin.quote ? `<q>${esc(e.origin.quote)}</q>` : ''}</p>` : '<p class="mm-muted">No origin citation is attached yet.</p>')}
 </section>
 
 <section class="mm-timeline-sec" id="mm-timeline" aria-labelledby="mm-timeline-h">
@@ -188,6 +191,12 @@ ${others.length ? `<ol class="mm-timeline">${others.map((c) => `<li class="mm-ti
 </section>
 
 ${examples.length ? `<section class="mm-examples" id="mm-examples" aria-labelledby="mm-examples-h"><h2 id="mm-examples-h">Examples</h2>${examples.map((c) => citation(c)).join('')}</section>` : '<section class="mm-examples" id="mm-examples" aria-labelledby="mm-examples-h"><h2 id="mm-examples-h">Examples</h2><p class="mm-muted">No example is attached yet.</p></section>'}
+${mediaExamples.length ? `<section class="mm-example-gallery" aria-labelledby="mm-gallery-h"><h2 id="mm-gallery-h">Remixes from the community</h2><div class="mm-gallery">${mediaExamples.map((x) => `<figure><a href="https://openvibe.media/o/${encodeURIComponent(x.media_id)}"><img src="https://openvibe.media/o/${encodeURIComponent(x.media_id)}" loading="lazy" alt="${esc(x.caption || e.title)}"></a>${x.caption ? `<figcaption>${esc(x.caption)}</figcaption>` : ''}${x.source_url ? `<p><a rel="nofollow noopener" href="${esc(x.source_url)}">Source</a></p>` : ''}</figure>`).join('')}</div></section>` : ''}
+${e.spread && e.spread.length ? `<section class="mm-spread" aria-labelledby="mm-spread-h"><h2 id="mm-spread-h">How it spread</h2><ol class="mm-timeline">${e.spread.map((x) => `<li class="mm-timeline-item"><time class="mm-timeline-when" datetime="${esc(x.observed_at)}">${esc(String(x.observed_at || '').slice(0, 10))}</time><div><b>${esc(x.place)}</b>${x.note ? `<p>${esc(x.note)}</p>` : ''}${x.url ? ` <a rel="nofollow noopener" href="${esc(x.url)}">Source</a>` : ''}</div></li>`).join('')}</ol></section>` : ''}
+${e.variations && e.variations.length ? `<section class="mm-variations" aria-labelledby="mm-variations-h"><h2 id="mm-variations-h">Variations</h2><ol class="mm-entries">${e.variations.map((x) => `<li class="mm-entry-card"><div class="mm-entry-link"><span class="mm-entry-title">${esc(x.name)}</span>${x.description ? `<span class="mm-entry-summary">${esc(x.description)}</span>` : ''}${x.source_url ? `<a href="${esc(x.source_url)}" rel="nofollow noopener">See source</a>` : ''}</div></li>`).join('')}</ol></section>` : ''}
+${e.related && e.related.length ? `<nav class="mm-related" aria-labelledby="mm-related-h"><h2 id="mm-related-h">Related memes</h2><ul class="mm-entries">${e.related.map((x) => `<li class="mm-entry-card"><a class="mm-entry-link" href="/m/${esc(x.slug)}"><span class="mm-entry-title">${esc(x.title)}</span>${x.summary ? `<span class="mm-entry-summary">${esc(x.summary)}</span>` : ''}</a></li>`).join('')}</ul></nav>` : ''}
+${liveUses.length ? `<section class="mm-live-mentions" aria-labelledby="mm-live-h"><h2 id="mm-live-h">Seen on OpenVibe.Live</h2><p class="mm-muted">This meme was named in a stream transcript.</p>${liveUses.map((c) => citation(c)).join('')}</section>` : ''}
+<details class="mm-entry-faq"><summary>How was this page documented?</summary><p>The entry summarizes cited origins, dated appearances, and community supplied examples. To request a correction or removal, use the report form below.</p></details>
 
 <footer class="mm-entry-foot">
 ${reported ? '<p class="mm-note" role="status">Thank you. Staff will look at the report.</p>' : ''}
@@ -244,39 +253,79 @@ ${entries.length ? `<ol class="mm-entries">${entries.map((e) => `<li class="mm-e
 function make({ templates = [], values = {}, preview = null, signedIn = false, problem = null } = {}) {
     const v = { template_id: templates[0] ? templates[0].id : '', visibility: 'public', ...values };
     const lines = LINES.map((i) => v[`line${i}`] || '');
+    const chosenTemplate = (preview && preview.template) || templates.find((t) => t.id === v.template_id) || templates[0] || null;
+    const layout = (chosenTemplate && chosenTemplate.layout) || {};
+    const baseBoxes = Array.isArray(layout.boxes) ? layout.boxes : [];
+    const boxCount = baseBoxes.length ? baseBoxes.length : Math.max(1, Math.min(4, Number(chosenTemplate && chosenTemplate.box_count) || 4));
+    const shownLines = lines.slice(0, Math.min(4, boxCount));
+    const stageText = shownLines.map((line, i) => {
+        const b = baseBoxes[i] || { x: 20, y: i * 60 + 8, w: 400, h: 48 };
+        const x = Number(layout.width) ? Number(b.x) / Number(layout.width) * 100 : 5;
+        const y = Number(layout.height) ? Number(b.y) / Number(layout.height) * 100 : i * 20;
+        const w = Number(layout.width) ? Number(b.w) / Number(layout.width) * 100 : 90;
+        const h = Number(layout.height) ? Number(b.h) / Number(layout.height) * 100 : 18;
+        return `<span class="mm-editor-box mm-font-impact" style="left:${x}%;top:${y}%;width:${w}%;height:${h}%;font-size:clamp(12px,6vw,30px);color:#fff;-webkit-text-stroke:3px #000">${esc(line)}</span>`;
+    }).join('');
     return `<div class="mm-wrap" id="mm-make">
 <header class="mm-page-h"><p class="mm-kicker">Meme maker</p><h1>Make a meme</h1>
-<p class="mm-lede">Choose a reusable template, write up to four lines, and preview as you type. Sign in to save an editable link or export a PNG.</p></header>
+<p class="mm-lede">Pick a format, add text, drag it into place, and download your meme. Uploads are reviewed before anyone else can use them.</p></header>
 ${problem ? `<p class="mm-note is-bad" role="alert">${esc(problem)}</p>` : ''}
 <div class="mm-make-grid">
 <form id="mm-caption-form" class="mm-form mm-card" method="post" action="/make">
-<label class="mm-field"><span>Find a template</span><input id="mm-template-filter" type="search" placeholder="Search templates" aria-controls="mm-template-grid" autocomplete="off"></label>
+<input type="hidden" name="editor_state" value="${esc(v.editor_state || '')}">
+<label class="mm-field"><span>Find a template</span><input id="mm-template-filter" type="search" placeholder="Search popular templates" aria-controls="mm-template-grid" autocomplete="off"></label>
+<label class="mm-field"><span>Upload your own template</span><input id="mm-template-upload" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPEG or WebP up to 6 MB. New uploads go to moderation.</small></label>
 <fieldset class="mm-templates" id="mm-template-grid"><legend>Choose a template</legend>
-${templates.map((t) => `<label class="mm-template${t.id === v.template_id ? ' is-chosen' : ''}"><input type="radio" name="template_id" value="${esc(t.id)}"${t.id === v.template_id ? ' checked' : ''} required><img src="${esc(t.image_url)}" alt="" width="220" height="140" loading="lazy"><span><b>${esc(t.name)}</b><small>${Number(t.box_count)} ${Number(t.box_count) === 1 ? 'box' : 'boxes'} · ${esc(t.license)}</small></span></label>`).join('')}
+${templates.map((t) => `<label class="mm-template${t.id === v.template_id ? ' is-chosen' : ''}" data-template="${esc(t.id)}" data-boxes="${Number(t.box_count) || 1}" data-layout="${esc(JSON.stringify(t.layout || {}))}"><input type="radio" name="template_id" value="${esc(t.id)}"${t.id === v.template_id ? ' checked' : ''} required><img src="${esc(t.image_url)}" alt="" width="220" height="140" loading="lazy"><span><b>${esc(t.name)}</b><small>${Number(t.box_count)} ${Number(t.box_count) === 1 ? 'box' : 'boxes'} · ${esc(t.license)}</small></span></label>`).join('')}
 </fieldset>
-${LINES.map((i) => `<label class="mm-field"><span>Line ${i}</span><input name="line${i}" type="text" maxlength="120" value="${esc(lines[i - 1])}" placeholder="${i === 1 ? 'when you recognize the format' : ''}"></label>`).join('')}
+${LINES.map((i) => `<label class="mm-field"${i > boxCount ? ' hidden' : ''}><span>Line ${i}</span><input name="line${i}" type="text" maxlength="120" value="${esc(lines[i - 1])}" placeholder="${i === 1 ? 'when you recognize the format' : ''}"></label>`).join('')}
+<fieldset class="mm-editor-tools"><legend>Style and place</legend>
+<label class="mm-field"><span>Type style</span><select name="font_style"><option value="impact">Classic Impact</option><option value="modern">Modern</option><option value="soft">Soft</option></select></label>
+<label class="mm-field"><span>Text size</span><input name="font_size" type="range" min="12" max="64" value="30"></label>
+<label class="mm-field"><span>Text color</span><input name="text_color" type="color" value="#ffffff"></label>
+<label class="mm-field"><span>Outline</span><input name="outline_color" type="color" value="#000000"></label>
+<label class="mm-field"><span>Outline width</span><input name="outline_width" type="range" min="0" max="8" value="3"></label>
+<label class="mm-field"><span>Crop left / right</span><input name="crop_x" type="range" min="0" max="100" value="50"></label>
+<label class="mm-field"><span>Crop top / bottom</span><input name="crop_y" type="range" min="0" max="100" value="50"></label>
+<button class="mm-btn mm-btn-quiet" type="button" data-add-sticker>＋ Add emoji sticker</button>
+<label class="mm-field mm-ai-idea"><span>Get caption ideas</span><input name="idea_topic" type="text" maxlength="300" placeholder="what are you making a meme about?"><button class="mm-btn" type="button" data-caption-ideas>Make it with AI</button><small data-ai-status aria-live="polite">Available without signing in · cheapest OpenVibe.AI route by default</small></label>
+</fieldset>
 <label class="mm-field"><span>Who can see it?</span><select name="visibility"><option value="public"${v.visibility === 'public' ? ' selected' : ''}>Anyone</option><option value="unlisted"${v.visibility === 'unlisted' ? ' selected' : ''}>Anyone with the link</option><option value="hidden"${v.visibility === 'hidden' ? ' selected' : ''}>Only me</option></select></label>
 <div class="mm-actions"><button class="mm-btn" type="submit">Save the caption</button><button class="mm-btn mm-btn-quiet" type="submit" formaction="/make" formmethod="get">Preview</button></div>
 ${signedIn ? '' : '<p class="mm-fine">You can preview without signing in. <a href="/auth/login?next=%2Fmake">Sign in</a> to save a caption.</p>'}
 </form>
 <aside class="mm-preview" id="mm-preview" aria-labelledby="mm-preview-h"><h2 id="mm-preview-h">Your canvas</h2>
-${preview ? `<figure class="mm-caption-card"><img src="${esc(preview.template.image_url)}" alt=""><figcaption>${preview.lines.map((l) => `<span>${esc(l)}</span>`).join('')}</figcaption></figure><p class="mm-fine">Text only, over ${esc(preview.template.name)}. Nothing is saved until you press Save.</p>` : '<p class="mm-muted">Press Preview to see your lines over the template.</p>'}
-${signedIn ? '<button class="mm-btn mm-btn-quiet" type="button" data-render-png>Download PNG</button><p class="mm-fine" data-render-status aria-live="polite"></p>' : '<p class="mm-fine">Sign in to export a PNG. Your preview is still free to use.</p>'}
+<div class="mm-editor-stage mm-caption-card" data-stage tabindex="0" aria-label="Meme canvas. Drag caption boxes to move them."><img data-canvas-image src="${esc(chosenTemplate ? chosenTemplate.image_url : '')}" alt=""><div data-caption-boxes>${stageText}</div><div data-stickers></div></div>
+<p class="mm-fine">Drag text to place it. Use the lower corner to resize. <span data-editor-status aria-live="polite"></span></p>
+${signedIn ? '<label class="mm-field"><span>Export format</span><select data-export-format><option value="png">PNG image</option><option value="gif">GIF loop</option><option value="mp4">MP4 clip</option></select></label><button class="mm-btn mm-btn-quiet" type="button" data-render-png>Download</button><p class="mm-fine" data-render-status aria-live="polite"></p>' : '<p class="mm-fine">Sign in to download PNG, GIF, or MP4. Your preview is free to use.</p>'}
 </aside>
 </div>
 </div>`;
 }
 
 function caption({ caption: c, template, mine = false, share = null } = {}) {
+    const editor = c.editor && typeof c.editor === 'object' ? c.editor : {};
+    const fontStyle = ['impact', 'modern', 'soft'].includes(editor.font_style) ? editor.font_style : 'impact';
+    const fontSize = Math.min(64, Math.max(12, Number(editor.font_size) || 30));
+    const color = /^#[0-9a-f]{6}$/i.test(String(editor.color || '')) ? editor.color : '#ffffff';
+    const outline = /^#[0-9a-f]{6}$/i.test(String(editor.outline || '')) ? editor.outline : '#000000';
+    const outlineWidth = Math.min(8, Math.max(0, Number(editor.outline_width) || 0));
+    const boxes = Array.isArray(editor.boxes) ? editor.boxes : [];
+    const boxCount = boxes.length ? boxes.length : Math.max(1, Math.min(4, Number(template && template.box_count) || c.lines.length));
+    const shownLines = c.lines.slice(0, Math.min(4, boxCount));
+    const boxHtml = shownLines.map((line, i) => {
+        const b = boxes[i] || [[5, 7, 90, 24], [5, 68, 90, 24], [5, 37, 90, 20], [5, 43, 90, 18]][i] || [5, 7 + i * 20, 90, 18];
+        const x = Math.min(95, Math.max(0, Number(b.x) || 0)), y = Math.min(95, Math.max(0, Number(b.y) || 0));
+        const w = Math.min(100 - x, Math.max(12, Number(b.w) || 90)), h = Math.min(100 - y, Math.max(8, Number(b.h) || 20));
+        return `<span class="mm-editor-box mm-font-${fontStyle}" style="left:${x}%;top:${y}%;width:${w}%;height:${h}%;font-size:${fontSize}px;color:${color};-webkit-text-stroke:${outlineWidth}px ${outline}">${esc(line)}</span>`;
+    }).join('');
+    const stickerHtml = (Array.isArray(editor.stickers) ? editor.stickers : []).filter((x) => x && ['✨', '😂', '🔥', '💀', '👀', '❤️', '🙌'].includes(x.emoji)).slice(0, 8).map((x) => `<span class="mm-editor-sticker" style="left:${Math.min(100, Math.max(0, Number(x.x) || 50))}%;top:${Math.min(100, Math.max(0, Number(x.y) || 50))}%">${x.emoji}</span>`).join('');
     return `<div class="mm-wrap" id="mm-caption" data-caption="${esc(c.id)}">
 <header class="mm-page-h"><p class="mm-kicker">A saved caption</p><h1>${esc(template ? template.name : 'Caption')}</h1>
 <p class="mm-lede">${mine ? 'Yours. ' : ''}Text over the template image, saved as lines — never as a rendered picture.</p></header>
-<figure class="mm-caption-card mm-caption-large">
-${template ? `<img src="${esc(template.image_url)}" alt="">` : ''}
-<figcaption>${c.lines.map((l) => `<span>${esc(l)}</span>`).join('')}</figcaption>
-</figure>
+<div class="mm-editor-stage mm-caption-card mm-caption-large">${template ? `<img src="${esc(template.image_url)}" alt="">` : ''}<div>${boxHtml}${stickerHtml}</div></div>
 <dl class="mm-facts"><div><dt>Saved</dt><dd>${time(c.created_at)}</dd></div><div><dt>Visibility</dt><dd>${esc(c.visibility)}</dd></div><div><dt>Caption</dt><dd><code>${esc(c.id)}</code></dd></div></dl>
-<div class="mm-actions">${share && share.url ? kit.share({ title: template ? template.name : 'Caption', url: share.url, image: (template && template.image_url) || null }) : ''}<a class="mm-btn" href="/make">Make another</a><a class="mm-btn mm-btn-quiet" href="/">Back to the memes</a></div>
+<div class="mm-actions">${share && share.url ? `${kit.share({ title: template ? template.name : 'Caption', url: share.url, text: c.lines.join(' / '), image: (template && template.image_url) || null })}<button class="mm-btn mm-btn-quiet" type="button" data-copy-link="${esc(share.url)}">Copy link</button><button class="mm-btn mm-btn-quiet" type="button" data-native-share="${esc(share.url)}" data-share-title="${esc(template ? template.name : 'My meme') }" data-share-text="${esc(c.lines.join(' / '))}">Share…</button><a class="mm-btn mm-btn-quiet" href="https://openvibe.community/forum/discuss?title=${encodeURIComponent(template ? template.name : 'My meme')}&amp;body=${encodeURIComponent(c.lines.join(' / ') + ' — ' + share.url)}" target="_blank" rel="noopener">Post to Feed</a><a class="mm-btn mm-btn-quiet" href="https://openvibe.pics/" target="_blank" rel="noopener">Upload to Pics</a><a class="mm-btn mm-btn-quiet" href="https://openvibe.chat/" target="_blank" rel="noopener">Share in Chat</a><a class="mm-btn mm-btn-quiet" href="/api/v1/captions/${encodeURIComponent(c.id)}/render?format=png" download>Download PNG</a><a class="mm-btn mm-btn-quiet" href="/api/v1/captions/${encodeURIComponent(c.id)}/render?format=gif" download>Download GIF</a><a class="mm-btn mm-btn-quiet" href="/api/v1/captions/${encodeURIComponent(c.id)}/render?format=mp4" download>Download MP4</a>` : ''}<a class="mm-btn" href="/make">Make another</a><a class="mm-btn mm-btn-quiet" href="/">Back to the memes</a></div>
 </div>`;
 }
 
@@ -298,15 +347,20 @@ ${ep('GET', '/api/v1/entries/:slug/series?days=30', 'Uses per UTC day, zero-fill
 ${ep('GET', '/api/v1/trending', 'Public entries, rising first.')}
 ${ep('GET', '/api/v1/week', 'This ISO week’s candidates and their vote counts.')}
 ${ep('GET', '/api/v1/templates', 'Caption templates: image, box count, source and license.')}
-${ep('POST', '/api/v1/render', 'Render a caption to PNG from a licensed template and 1–4 text lines; same contract as /generate.')}
+${ep('POST', '/api/v1/caption-ideas', 'Signed-out safe caption suggestions using the cheapest OpenVibe.AI route by default; at most 8 requests per minute per address.')}
+${ep('POST', '/api/v1/render', 'Render a caption as PNG, GIF or MP4 from a licensed template, 1–4 lines and optional editor geometry.')}
+${ep('GET', '/api/v1/captions/:id/render?format=png|gif|mp4', 'Download the rendered public caption; private captions require their owner or staff.')}
 ${ep('GET', '/api/v1/captions/:id', 'One saved caption (a hidden one is 404 unless it is yours or you are staff).')}
 </dl></section>
 <section><h2>Write (signed in)</h2><dl class="mm-eps">
 ${ep('POST', '/api/v1/week/vote', '<code>{ entry_id }</code>. One vote a week per person; a second call changes the choice. Same-origin.')}
 ${ep('POST', '/api/v1/captions', '<code>{ template_id, lines, visibility? }</code>: 1–4 lines, each at most 120 characters, text only, blocked words refused.')}
+${ep('POST', '/api/v1/templates/uploads', '<code>{ name, image }</code> (PNG/JPEG/WebP data URL, at most 6 MB), stored in Media and held for staff review.')}
 ${ep('POST', '/api/v1/entries/:slug/report', '<code>{ kind: "takedown"|"correction", reason, note? }</code> for staff review.')}
 </dl></section>
 <section><h2>Staff (Network role <code>global_mod</code> or above)</h2><dl class="mm-eps">
+${ep('GET', '/api/v1/staff/templates/uploads', 'List member-uploaded templates waiting for review.')}
+${ep('POST', '/api/v1/staff/templates/:id/review', '<code>{ decision: "approved"|"rejected" }</code>.')}
 ${ep('POST', '/api/v1/entries/:slug/publish', 'Make a hidden candidate public. Refused when its origin citation is gone (409).')}
 ${ep('POST', '/api/v1/entries/:slug/hide', 'Remove it from public lists and tombstone its Search document.')}
 ${ep('PATCH', '/api/v1/entries/:slug', '<code>{ title, kind, status }</code>: change an entry; status history is kept.')}

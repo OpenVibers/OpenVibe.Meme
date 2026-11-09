@@ -47,18 +47,18 @@ function createPageRoutes(ctx) {
     // ── Home ─────────────────────────────────────────────────
     r.get('/', async (req, res) => {
         const { week } = currentWeek(s.now());
-        const [trendResult, weekOut, c] = await Promise.all([
+        const [trendResult, weekOut, c, templatesToday] = await Promise.all([
             entries.list({ limit: 8, scope: 'internet', sort: 'top', window: 'week' }),
-            entries.week({ week }), counts(),
+            entries.week({ week }), counts(), entries.trendingTemplates(6),
         ]);
         const trending = trendResult.entries || [];
         const feature = null;
         return page(req, res, {
             index: true, cache: PUBLIC_CACHE, agentLayer: true,
             title: null,
-            description: 'Explore an open meme encyclopedia: learn what memes mean, trace their origins and variations, and make your own with reusable templates.',
+            description: 'Explore an open meme encyclopedia with cited origins and remixes; make a meme with draggable text, stickers, AI caption ideas, and PNG/GIF/MP4 downloads.',
             jsonLd: homeJsonLd(config),
-            body: raw(views.home({ trending, week: weekOut, counts: c, feature })),
+            body: raw(views.home({ trending, week: weekOut, counts: c, feature, templatesToday })),
         });
     });
 
@@ -117,22 +117,25 @@ function createPageRoutes(ctx) {
         if (!row || (row.visibility === 'hidden' && !staff)) return notFound(req, res);
         // OpenVibe-only catchphrases are not encyclopedia entries; retire their old public pages.
         if (row.scope === 'openvibe') return res.redirect(301, '/');
-        const citations = await entries.citations(row.id);
-        const e = entries.wireEntry(row);
+        const detail = await entries.detail(row, { staff });
+        const citations = detail.citations;
+        const e = detail;
         const description = metaDescription(e, citations);
-        const jsonLd = seo.jsonLd.webPage({
+        const jsonLd = [seo.jsonLd.webPage({
             name: e.title,
             url: `${base()}/m/${e.slug}`,
             description,
             siteUrl: base(),
-        });
+        }), { '@context': 'https://schema.org', '@type': 'CreativeWork', name: e.title, description,
+            url: `${base()}/m/${e.slug}`, dateCreated: e.first_seen_at || undefined,
+            keywords: Array.isArray(e.labels) ? e.labels.join(', ') : undefined }];
         return page(req, res, {
             index: e.visibility === 'public',
             agentLayer: e.visibility === 'public',
             cache: e.visibility === 'public' ? PUBLIC_CACHE : null,
             title: e.title,
             description,
-            jsonLd: [jsonLd],
+            jsonLd,
             body: raw(views.entry({ e, citations, signedIn: Boolean(signedIn(req)), staff, reported: req.query.reported === '1', problem,
                 share: { url: `${base()}/m/${e.slug}`, image: social.url('meme') } })),
         });
@@ -181,19 +184,22 @@ function createPageRoutes(ctx) {
     // ── The caption generator ───────────────────────────────
     const LINES = [1, 2, 3, 4];
     function makeValues(src = {}) {
-        const v = { template_id: src.template_id, visibility: src.visibility || 'public' };
+        let editor = {};
+        if (typeof src.editor_state === 'string' && src.editor_state.length <= 8192) { try { editor = JSON.parse(src.editor_state); } catch {} }
+        const v = { template_id: src.template_id, visibility: src.visibility || 'public', editor_state: JSON.stringify(editor && typeof editor === 'object' && !Array.isArray(editor) ? editor : {}) };
         for (const i of LINES) v[`line${i}`] = String(src[`line${i}`] == null ? '' : src[`line${i}`]).slice(0, 120);
         return v;
     }
     async function renderMake(req, res, { values = {}, problem = null, status = 200 } = {}) {
         const templates = await entries.templates();
-        const chosen = templates.find((t) => t.id === values.template_id) || templates[0] || null;
+        const initial = templates.find((t) => t.id === 'tpl_classic') || templates.find((t) => Number(t.box_count) >= 2) || templates[0] || null;
+        const chosen = templates.find((t) => t.id === values.template_id) || initial;
         const previewLines = LINES.map((i) => String(values[`line${i}`] || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
         const preview = chosen && previewLines.length ? { template: chosen, lines: previewLines } : null;
         return page(req, res, {
             index: true, cache: PUBLIC_CACHE, agentLayer: true,
             title: 'Make a meme',
-            description: 'Choose a reusable meme template, write a caption, preview as you type, and save an editable link or export a PNG.',
+            description: 'Make a meme with movable text, crop and style controls, emoji stickers, optional AI caption ideas, and PNG/GIF/MP4 export.',
             body: raw(views.make({ templates, values: { ...values, template_id: chosen ? chosen.id : '' }, preview, signedIn: Boolean(signedIn(req)), problem })),
         }, status);
     }
@@ -203,7 +209,7 @@ function createPageRoutes(ctx) {
         if (!sameOrigin(req, config.baseUrl)) return notFromHere(req, res);
         const values = makeValues(req.body || {});
         const lines = LINES.map((i) => values[`line${i}`]).filter((l) => String(l).trim());
-        const out = await entries.createCaption({ subject: req.viewer.subject, templateId: values.template_id, lines, visibility: values.visibility });
+        const out = await entries.createCaption({ subject: req.viewer.subject, templateId: values.template_id, lines, visibility: values.visibility, editor: JSON.parse(values.editor_state || '{}') });
         if (!out.ok) return renderMake(req, res, { values, problem: out.message || 'That caption could not be saved.', status: out.status || 400 });
         return res.redirect(303, `/c/${encodeURIComponent(out.caption.id)}`);
     });
