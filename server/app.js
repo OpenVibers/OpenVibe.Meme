@@ -119,6 +119,7 @@ async function createApp(opts = {}) {
 
     const ctx = {
         config, s, keys, sso, principal, search, searchRelay, entries, upstreams, importer, reverifier, accountData, accountSend, log,
+        fetchImpl,
         ai: aiRunner, judgeAi: ai, context, judge, judgeJob,
         media, trends, reddit, sourceRegistration,
         redditReader, analyzer,

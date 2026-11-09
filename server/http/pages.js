@@ -203,7 +203,13 @@ function createPageRoutes(ctx) {
             body: raw(views.make({ templates, values: { ...values, template_id: chosen ? chosen.id : '' }, preview, signedIn: Boolean(signedIn(req)), problem })),
         }, status);
     }
-    r.get('/make', async (req, res) => renderMake(req, res, { values: makeValues(req.query) }));
+    r.get('/make', async (req, res) => {
+        if (!req.query.picture) return renderMake(req, res, { values: makeValues(req.query) });
+        const slug = String(req.query.picture);
+        if (!/^[2-9a-km-zA-HJ-NP-Z]{8}$/.test(slug)) return page(req, res, { title:'Not found', body:html`<h1>No such picture</h1>` },404);
+        if (!signedIn(req)) return page(req,res,{title:'Make a meme',body:signInPrompt('Sign in to open your Pics picture.', `/make?picture=${slug}`)},401);
+        return page(req,res,{title:'Make a meme from Pics',cache:'private, no-store',body:html`<section class="mm-wrap mm-narrow"><h1>Make a meme from your picture</h1><img src="/api/v1/pics/${slug}/preview" alt="Your selected picture" width="600" class="mm-pics-source"><form class="mm-form" method="post" action="/api/v1/pics/${slug}/render"><label>Top caption<input name="top" maxlength="120"></label><label>Bottom caption<input name="bottom" maxlength="120"></label><button class="mm-btn" type="submit">Download meme PNG</button></form><p>Your original stays unchanged. <a href="https://openvibe.pics/i/${slug}">Back to picture</a></p></section>`});
+    });
     r.post('/make', async (req, res) => {
         if (!signedIn(req)) return page(req, res, { title: 'Make a caption', body: raw(views.signIn({ title: 'Make a caption', text: 'A saved caption belongs to your OpenVibe account, so you can find it later.', next: '/make' })) }, 401);
         if (!sameOrigin(req, config.baseUrl)) return notFromHere(req, res);

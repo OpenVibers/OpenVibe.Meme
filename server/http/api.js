@@ -309,6 +309,24 @@ function createApi(ctx) {
 
     // Render user-supplied lines as PNG, GIF, or MP4 with the same licensed template and bundled fonts as the maker.
     // This path is deterministic and does not spend the AI research/generation budget.
+    const sameSiteWrite = (req, res, next) => sameOrigin(req, config.baseUrl) ? next() : problem(res, 403, 'meme.cross_site', 'A write must come from OpenVibe.Meme.');
+    r.get('/pics/:slug/preview', requirePerson, async (req, res) => {
+        try {
+            const picture = await require('../pics-maker').loadPicture(ctx, req, req.params.slug);
+            return res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }).type(picture.mime_type).send(picture.buffer);
+        } catch (e) { return problem(res, e.status || 502, 'meme.picture_unavailable', 'This picture is unavailable.'); }
+    });
+    r.post('/pics/:slug/render', requirePerson, sameSiteWrite, express.urlencoded({ extended: false, limit: '8kb' }), async (req, res) => {
+        const checked = captionLines([String((req.body && req.body.top) || '').slice(0, 120), String((req.body && req.body.bottom) || '').slice(0, 120)]);
+        if (!checked.ok) return invalid(res, 'Write a caption of at most 120 characters per line.');
+        try {
+            const maker = require('../pics-maker');
+            const picture = await maker.loadPicture(ctx, req, req.params.slug);
+            const rendered = await maker.renderPicture(picture, checked.lines);
+            return res.set({ 'Cache-Control': 'private, no-store', 'Content-Disposition': 'attachment; filename="openvibe-meme.png"', 'X-Content-Type-Options': 'nosniff' }).type('png').send(rendered.png);
+        } catch (e) { return problem(res, e.status || 502, 'meme.picture_unavailable', 'This picture could not be rendered.'); }
+    });
+
     r.post('/render', requirePerson, async (req, res) => {
         const body = req.body && typeof req.body === 'object' ? req.body : {};
         const format = ['png', 'gif', 'mp4'].includes(body.format) ? body.format : 'png';

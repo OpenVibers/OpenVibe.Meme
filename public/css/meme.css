@@ -255,3 +255,4 @@ fieldset.mm-templates, fieldset.mm-words, fieldset.mm-editor-tools { min-inline-
   .mm-make-grid { grid-template-columns: minmax(0, 1fr); }
   .mm-make-grid > .mm-preview { order: -1; }
 }
+.mm-pics-source { max-width:100%; height:auto; display:block; margin-bottom:20px; }
