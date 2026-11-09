@@ -273,12 +273,16 @@ ${problem ? `<p class="mm-note is-bad" role="alert">${esc(problem)}</p>` : ''}
 <div class="mm-make-grid">
 <form id="mm-caption-form" class="mm-form mm-card" method="post" action="/make">
 <input type="hidden" name="editor_state" value="${esc(v.editor_state || '')}">
-<label class="mm-field"><span>Find a template</span><input id="mm-template-filter" type="search" placeholder="Search popular templates" aria-controls="mm-template-grid" autocomplete="off"></label>
-<label class="mm-field"><span>Upload your own template</span><input id="mm-template-upload" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPEG or WebP up to 6 MB. New uploads go to moderation.</small></label>
-<fieldset class="mm-templates" id="mm-template-grid"><legend>Choose a template</legend>
+<fieldset class="mm-words"><legend>Your words</legend>
+${LINES.map((i) => `<label class="mm-field"${i > boxCount ? ' hidden' : ''}><span>Line ${i}</span><input name="line${i}" type="text" maxlength="120" value="${esc(lines[i - 1])}" placeholder="${i === 1 ? 'when you recognize the format' : ''}"></label>`).join('')}
+</fieldset>
+<p class="mm-tpl-h" aria-hidden="true">Template</p>
+<div class="mm-tpl-bar"><label class="mm-field mm-tpl-find"><span class="mm-sr">Find a template</span><input id="mm-template-filter" type="search" placeholder="Find a template" aria-controls="mm-template-grid" autocomplete="off"></label>
+<label class="mm-upload"><input id="mm-template-upload" type="file" accept="image/png,image/jpeg,image/webp"><span>Upload your own</span></label></div>
+<p class="mm-fine mm-tpl-note">PNG, JPEG or WebP up to 6 MB. New uploads go to moderation before others can use them.</p>
+<fieldset class="mm-templates" id="mm-template-grid"><legend class="mm-sr">Template</legend>
 ${templates.map((t) => `<label class="mm-template${t.id === v.template_id ? ' is-chosen' : ''}" data-template="${esc(t.id)}" data-boxes="${Number(t.box_count) || 1}" data-layout="${esc(JSON.stringify(t.layout || {}))}"><input type="radio" name="template_id" value="${esc(t.id)}"${t.id === v.template_id ? ' checked' : ''} required><img src="${esc(t.image_url)}" alt="" width="220" height="140" loading="lazy"><span><b>${esc(t.name)}</b><small>${Number(t.box_count)} ${Number(t.box_count) === 1 ? 'box' : 'boxes'} · ${esc(t.license)}</small></span></label>`).join('')}
 </fieldset>
-${LINES.map((i) => `<label class="mm-field"${i > boxCount ? ' hidden' : ''}><span>Line ${i}</span><input name="line${i}" type="text" maxlength="120" value="${esc(lines[i - 1])}" placeholder="${i === 1 ? 'when you recognize the format' : ''}"></label>`).join('')}
 <fieldset class="mm-editor-tools"><legend>Style and place</legend>
 <label class="mm-field"><span>Type style</span><select name="font_style"><option value="impact">Classic Impact</option><option value="modern">Modern</option><option value="soft">Soft</option></select></label>
 <label class="mm-field"><span>Text size</span><input name="font_size" type="range" min="12" max="64" value="30"></label>
