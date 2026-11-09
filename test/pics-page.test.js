@@ -55,6 +55,12 @@ const { boot, check, done } = require('./helpers/boot');
             assert.ok(metadata.authorization.startsWith('Bearer '), 'Pics is asked with a person token');
         });
 
+        await check('a write from another site is refused', async () => {
+            const cross = await t.get('/api/v1/pics/Abcdef23/render', { as: alice, origin: 'https://evil.test', form: { top: 'Hello' } });
+            assert.strictEqual(cross.status, 403);
+            assert.match(cross.text, /meme\.cross_site/);
+        });
+
         await check('the renderer answers a PNG download and refuses an empty caption', async () => {
             const made = await t.get('/api/v1/pics/Abcdef23/render', { as: alice, form: { top: 'Hello', bottom: 'World' } });
             assert.strictEqual(made.status, 200, made.text.slice(0, 300));
