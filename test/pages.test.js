@@ -47,7 +47,7 @@ function jsonLd(html) {
             assert.strictEqual(r.status, 200, r.text);
             assert.strictEqual(r.headers.get('cache-control'), 'public, max-age=60');
             assert.strictEqual(r.headers.get('vary'), 'Cookie');
-            for (const marker of ['id="mm-home"', 'id="mm-trending"', 'id="mm-week-teaser"', 'class="sc-room-scenes"', '<noscript><nav', '<footer id="ov-footer"', '<main id="main"', 'Cat typing', '/browse', '/make']) assert.ok(r.text.includes(marker), marker);
+            for (const marker of ['id="mm-home"', 'id="mm-trending"', 'id="mm-week-teaser"', 'class="sc-room-scenes"', '<div id="navbar-mount"><nav', '<footer id="ov-footer"', '<main id="main"', 'Cat typing', '/browse', '/make']) assert.ok(r.text.includes(marker), marker);
             const types = jsonLd(r.text).map((x) => x['@type']);
             assert.ok(types.includes('WebSite'), types.join(','));
             assert.ok(types.includes('WebApplication'), types.join(','));
