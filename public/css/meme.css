@@ -206,8 +206,6 @@ html.ov-motion .mm-demo-bars i { animation: mm-bar .9s cubic-bezier(.2,.7,.2,1) 
     #mm-caption-form .mm-actions .mm-btn { min-height: 48px; flex: 1; }
 }
 @media (max-width: 380px) { .mm-browse-filters { grid-template-columns: minmax(0, 1fr); } .mm-browse-filters .mm-field:first-child, .mm-browse-filters > .mm-btn { grid-column: auto; } }
-@media (prefers-reduced-motion: reduce) { .mm-tree-lines path, .mm-sticker, .mm-demo-bars i { animation: none !important; } }
-html[data-ov-motion=reduced] .mm-tree-lines path, html[data-ov-motion=reduced] .mm-sticker, html[data-ov-motion=reduced] .mm-demo-bars i { animation: none !important; }
 
 /* Be the first (10-31): what is still missing, one short row below the scenes, never an empty section up top. */
 .mm-first-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 10px; }
