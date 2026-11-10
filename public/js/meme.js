@@ -106,18 +106,53 @@
             } catch (error) { ideaStatus.textContent = error.message || 'Could not get caption ideas.'; }
             finally { ideaButton.disabled = false; }
         });
-        var upload = document.getElementById('mm-template-upload');
-        if (upload) upload.addEventListener('change', async function () {
-            var file = upload.files && upload.files[0]; if (!file) return;
-            if (file.size > 6 * 1024 * 1024) { editorStatus.textContent = 'Choose an image under 6 MB.'; return; }
-            editorStatus.textContent = 'Uploading for review…';
-            try {
-                var data = await new Promise(function (resolve, reject) { var reader = new FileReader(); reader.onload = function () { resolve(reader.result); }; reader.onerror = reject; reader.readAsDataURL(file); });
-                var response = await fetch('/api/v1/templates/uploads', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: file.name.replace(/\.[^.]+$/, '').slice(0, 80), image: data }) });
-                var result = await response.json(); if (!response.ok) throw new Error(result.detail || 'Upload could not be submitted.');
-                editorStatus.textContent = 'Submitted for review. You can keep making this meme while it is checked.'; upload.value = '';
-            } catch (error) { editorStatus.textContent = error.message || 'Upload failed.'; }
-        });
+        // A member template: the shared picker and progress meter, then the same Media-backed review endpoint.
+        var upload = document.querySelector('[data-template-upload]');
+        if (upload && window.OVUpload) {
+            var uploadStatus = document.querySelector('[data-template-upload-status]');
+            var uploadMeter = document.createElement('div');
+            uploadMeter.hidden = true;
+            upload.after(uploadMeter);
+            var lastUpload = null;
+            function sayUpload(text, bad) { if (uploadStatus) { uploadStatus.textContent = text; uploadStatus.className = 'mm-fine' + (bad ? ' is-bad' : ''); } }
+            var meter = window.OVUpload.progress(uploadMeter, { onRetry: function () { if (lastUpload) sendTemplate(lastUpload.file, lastUpload.row); } });
+            function sendTemplate(file, row) {
+                if (file.size > 6 * 1024 * 1024) { sayUpload('Choose an image under 6 MB.', true); return; }
+                lastUpload = { file: file, row: row };
+                uploadMeter.hidden = false;
+                meter.update({ state: 'processing', done: 0, total: file.size, message: 'Preparing your image' });
+                sayUpload('Preparing your image…');
+                var reader = new FileReader();
+                reader.onerror = function () { meter.update({ state: 'failed', message: 'That image could not be read.' }); sayUpload('That image could not be read.', true); };
+                reader.onload = function () {
+                    var data = String(reader.result || '');
+                    var payload = JSON.stringify({ name: file.name.replace(/\.[^.]+$/, '').slice(0, 80), image: data });
+                    meter.update({ state: 'sending', done: 0, total: payload.length });
+                    sayUpload('Uploading for review…');
+                    var xhr = new XMLHttpRequest();
+                    xhr.open('POST', '/api/v1/templates/uploads');
+                    xhr.setRequestHeader('Content-Type', 'application/json');
+                    xhr.withCredentials = true;
+                    xhr.upload.onprogress = function (e) { if (e.lengthComputable) meter.update({ state: 'sending', done: e.loaded, total: e.total }); };
+                    xhr.onload = function () {
+                        var body = null; try { body = JSON.parse(xhr.responseText || 'null'); } catch (_) { body = null; }
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            meter.update({ state: 'done', done: payload.length, total: payload.length, message: 'In the review queue' });
+                            sayUpload('Submitted for review. You can keep making this meme while it is checked.');
+                            if (row) { row.dispatchEvent(new Event('remove')); row.remove(); }
+                            lastUpload = null;
+                            return;
+                        }
+                        var detail = (body && (body.detail || body.error)) || 'Upload could not be submitted.';
+                        meter.update({ state: 'failed', message: detail }); sayUpload(detail, true);
+                    };
+                    xhr.onerror = function () { meter.update({ state: 'failed', message: 'The connection dropped. Try again.' }); sayUpload('The connection dropped. Try again.', true); };
+                    xhr.send(payload);
+                };
+                reader.readAsDataURL(file);
+            }
+            window.OVUpload.picker(upload, { label: 'Choose a template image', accept: 'image/png,image/jpeg,image/webp', onFile: sendTemplate });
+        }
         var download = aside.querySelector('[data-render-png]');
         var status = aside.querySelector('[data-render-status]');
         if (download) download.addEventListener('click', async function () {

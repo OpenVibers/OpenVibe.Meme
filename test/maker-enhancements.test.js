@@ -51,7 +51,9 @@ const { boot, check, done } = require('./helpers/boot');
         await check('maker page renders the touch canvas, uploads, editor controls, and signed-out AI helper', async () => {
             const page = await t.get('/make');
             assert.strictEqual(page.status, 200);
-            for (const text of ['data-stage', 'mm-template-upload', 'font_style', 'data-add-sticker', 'data-caption-ideas']) assert.ok(page.text.includes(text), text);
+            for (const text of ['data-stage', 'data-template-upload', 'font_style', 'data-add-sticker', 'data-caption-ideas']) assert.ok(page.text.includes(text), text);
+            assert.ok(page.text.includes('/shared/ov-upload.js') && page.text.includes('/shared/ov-upload.css'), 'the maker loads the shared upload kit');
+            assert.ok(!page.text.includes('type="file"'), 'no hand-rolled file input remains');
         });
         await check('custom editor geometry and stickers render, and saved captions retain editable state', async () => {
             const editor = { boxes: [{ x: 5, y: 7, w: 90, h: 24 }, { x: 5, y: 68, w: 90, h: 24 }, { x: 5, y: 38, w: 90, h: 18 }, { x: 5, y: 44, w: 90, h: 18 }], stickers: [{ emoji: '🔥', x: 52, y: 54 }], font_style: 'impact', font_size: 30, color: '#ffffff', outline: '#000000', outline_width: 3 };

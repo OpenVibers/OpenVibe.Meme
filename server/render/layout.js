@@ -89,7 +89,9 @@ ${appIcon.headTags({ site: 'meme' })}
 <link rel="stylesheet" href="${ovServe.url('room.css')}">
 <link rel="stylesheet" href="${ovServe.url('showcase.css')}">
 <link rel="stylesheet" href="${asset('css/meme.css')}">
+${o.upload ? `<link rel="stylesheet" href="${ovServe.url('ov-upload.css')}">` : ''}
 <script src="${ovServe.url('motion.js')}" defer></script>
+${o.upload ? `<script src="${ovServe.url('ov-upload.js')}" defer></script>` : ''}
 <script src="${asset('js/meme.js')}" defer></script>
 ${render(scripts)}
 <meta name="ov-boost" content="meme@${require('./html').esc(RELEASE)}">

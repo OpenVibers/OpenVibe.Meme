@@ -201,6 +201,7 @@ function createPageRoutes(ctx) {
             title: 'Make a meme',
             description: 'Make a meme with movable text, crop and style controls, emoji stickers, optional AI caption ideas, and PNG/GIF/MP4 export.',
             body: raw(views.make({ templates, values: { ...values, template_id: chosen ? chosen.id : '' }, preview, signedIn: Boolean(signedIn(req)), problem })),
+            upload: true,
         }, status);
     }
     r.get('/make', async (req, res) => {

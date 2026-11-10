@@ -278,7 +278,9 @@ ${LINES.map((i) => `<label class="mm-field"${i > boxCount ? ' hidden' : ''}><spa
 </fieldset>
 <p class="mm-tpl-h" aria-hidden="true">Template</p>
 <div class="mm-tpl-bar"><label class="mm-field mm-tpl-find"><span class="mm-sr">Find a template</span><input id="mm-template-filter" type="search" placeholder="Find a template" aria-controls="mm-template-grid" autocomplete="off"></label>
-<label class="mm-upload"><input id="mm-template-upload" type="file" accept="image/png,image/jpeg,image/webp"><span>Upload your own</span></label></div>
+<details class="mm-upload"><summary class="ovk-btn ovk-btn--quiet">Upload your own</summary>
+<div id="mm-template-upload" data-template-upload></div>
+<p class="mm-fine" data-template-upload-status role="status" aria-live="polite"></p></details></div>
 <p class="mm-fine mm-tpl-note">PNG, JPEG or WebP up to 6 MB. New uploads go to moderation before others can use them.</p>
 <fieldset class="mm-templates" id="mm-template-grid"><legend class="mm-sr">Template</legend>
 ${templates.map((t) => `<label class="mm-template${t.id === v.template_id ? ' is-chosen' : ''}" data-template="${esc(t.id)}" data-boxes="${Number(t.box_count) || 1}" data-layout="${esc(JSON.stringify(t.layout || {}))}"><input type="radio" name="template_id" value="${esc(t.id)}"${t.id === v.template_id ? ' checked' : ''} required><img src="${esc(t.image_url)}" alt="" width="220" height="140" loading="lazy"><span><b>${esc(t.name)}</b><small>${Number(t.box_count)} ${Number(t.box_count) === 1 ? 'box' : 'boxes'} · ${esc(t.license)}</small></span></label>`).join('')}
