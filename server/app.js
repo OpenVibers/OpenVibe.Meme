@@ -56,6 +56,7 @@ const { createGenerateAi } = require('./generate-ai');
 const { createGenerateMedia } = require('./generate-media');
 const { createGenerator } = require('./generate');
 const { createNetworkSender } = require('openvibe-sdk/account-data');
+const { createServiceOutbox } = require('openvibe-sdk/events');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const VERSION = require('../package.json').version;
@@ -86,7 +87,11 @@ async function createApp(opts = {}) {
         }) : null,
     });
     const search = createSearchIndex({ config, s, onQueued: () => searchRelay.kick() });
-    const entries = createStore(s, { search });
+    const eventOutbox = createServiceOutbox({ db: s.db, source: 'meme', eventsUrl: config.events.url,
+        networkInternalUrl: config.networkInternalUrl, clientId: config.oauth.clientId,
+        clientSecret: config.oauth.clientSecret, intervalMs: config.events.intervalMs,
+        now: s.now, fetch: fetchImpl, log, eventTypes: ['meme.caption.created'] });
+    const entries = createStore(s, { search, eventOutbox });
     const upstreams = createUpstreams({ config, fetchImpl, log });
     const importer = createImporter({ config, s, entries, upstreams, fetchImpl, log });
     const reverifier = createReverifier({ config, s, entries, upstreams, log });
@@ -118,7 +123,7 @@ async function createApp(opts = {}) {
         : async () => { throw new Error('OV_OAUTH_CLIENT_SECRET is not set: Meme cannot answer account events'); });
 
     const ctx = {
-        config, s, keys, sso, principal, search, searchRelay, entries, upstreams, importer, reverifier, accountData, accountSend, log,
+        config, s, keys, sso, principal, search, searchRelay, eventOutbox, entries, upstreams, importer, reverifier, accountData, accountSend, log,
         fetchImpl,
         ai: aiRunner, judgeAi: ai, context, judge, judgeJob,
         media, trends, reddit, sourceRegistration,

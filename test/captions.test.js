@@ -37,6 +37,18 @@ const { boot, check, done } = require('./helpers/boot');
             assert.strictEqual(r.json().mine, false);
         });
 
+        await check('only public captions queue a content-free activity event', async () => {
+            const rows = await t.ctx.s.db.many('SELECT envelope FROM event_outbox ORDER BY id');
+            assert.strictEqual(rows.length, 2);
+            for (const { envelope } of rows) {
+                assert.strictEqual(envelope.event_type, 'meme.caption.created');
+                assert.deepStrictEqual(envelope.actor, { type: 'user', id: alice.subject });
+                assert.deepStrictEqual(envelope.payload.owner, { type: 'user', id: alice.subject });
+                assert.ok(envelope.payload.caption_id.startsWith('mcp_'));
+                assert.ok(!JSON.stringify(envelope).includes('when the robot'));
+            }
+        });
+
         await check('line count, line length, empty lines, blocked words and the template are enforced', async () => {
             const tooMany = await t.get('/api/v1/captions', { as: alice, json: { template_id: tpl.id, lines: ['1', '2', '3', '4', '5'] } });
             assert.strictEqual(tooMany.status, 400);
@@ -68,6 +80,7 @@ const { boot, check, done } = require('./helpers/boot');
             assert.strictEqual((await t.get(`/api/v1/captions/${c.id}`, { as: alice })).status, 200);
             const mod = t.network.addUser('mod', { role: 'global_mod' });
             assert.strictEqual((await t.get(`/api/v1/captions/${c.id}`, { as: mod })).status, 200);
+            assert.strictEqual(Number(await t.ctx.s.db.value('SELECT count(*) FROM event_outbox')), 2);
         });
 
         await check('meme_captions stores no image and no rendered bytes', async () => {
