@@ -159,6 +159,7 @@ function jsonLd(html) {
             assert.strictEqual(form.headers.get('cache-control'), 'public, max-age=60');
             assert.ok(form.text.includes('id="mm-make"'));
             assert.ok(form.text.includes('id="mm-caption-form"'));
+            assert.ok(form.text.includes('data-ov-guide="meme.caption"'), 'the caption form has the Quest guide target');
             assert.ok(form.text.includes(`/img/template-`));
             const preview = await t.get(`/make?template_id=${tpl.id}&line1=when%20the%20robot&line2=is%20offline`);
             assert.strictEqual(preview.status, 200);

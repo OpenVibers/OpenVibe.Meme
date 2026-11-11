@@ -297,7 +297,7 @@ ${templates.map((t) => `<label class="mm-template${t.id === v.template_id ? ' is
 <label class="mm-field mm-ai-idea"><span>Get caption ideas</span><input name="idea_topic" type="text" maxlength="300" placeholder="what are you making a meme about?"><button class="mm-btn" type="button" data-caption-ideas>Make it with AI</button><small data-ai-status aria-live="polite">Available without signing in · cheapest OpenVibe.AI route by default</small></label>
 </fieldset>
 <label class="mm-field"><span>Who can see it?</span><select name="visibility"><option value="public"${v.visibility === 'public' ? ' selected' : ''}>Anyone</option><option value="unlisted"${v.visibility === 'unlisted' ? ' selected' : ''}>Anyone with the link</option><option value="hidden"${v.visibility === 'hidden' ? ' selected' : ''}>Only me</option></select></label>
-<div class="mm-actions"><button class="mm-btn" type="submit">Save the caption</button><button class="mm-btn mm-btn-quiet" type="submit" formaction="/make" formmethod="get">Preview</button></div>
+<div class="mm-actions"><button class="mm-btn" type="submit" data-ov-guide="meme.caption">Save the caption</button><button class="mm-btn mm-btn-quiet" type="submit" formaction="/make" formmethod="get">Preview</button></div>
 ${signedIn ? '' : '<p class="mm-fine">You can preview without signing in. <a href="/auth/login?next=%2Fmake">Sign in</a> to save a caption.</p>'}
 </form>
 <aside class="mm-preview" id="mm-preview" aria-labelledby="mm-preview-h"><h2 id="mm-preview-h">Your canvas</h2>
