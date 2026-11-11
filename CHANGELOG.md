@@ -4,6 +4,8 @@ What changed in OpenVibe.Meme, newest first.
 
 ## Unreleased
 
+- Public caption saves now queue a content-free `meme.caption.created` activity event in the same transaction; hidden and unlisted captions do not emit it. The relay starts when `MEME_CAPTION_EVENTS_ENABLED=on` after Events accepts the contract.
+
 - **The maker, second slice.** `/make` is a phone-first editor: template search, draggable and resizable caption
   boxes, crop and type/outline controls, emoji stickers, optional signed-out caption ideas from OpenVibe.AI's cheapest
   route, and PNG/GIF/MP4 downloads. Captions save their editor state as text and geometry, never as a rendered image.

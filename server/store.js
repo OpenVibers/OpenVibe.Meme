@@ -495,7 +495,7 @@ function captionLines(raw) {
     return { ok: true, lines };
 }
 
-function createStore(s, { search }) {
+function createStore(s, { search, eventOutbox = null }) {
     const db = s.db;
     // Every write function takes an optional transaction handle; without one it runs on the pool and is its own
     // statement (no multi-statement atomicity unless the caller opens s.tx()).
@@ -1233,11 +1233,19 @@ function createStore(s, { search }) {
         const tpl = await db.maybe('SELECT id FROM meme_templates WHERE id = $1', [String(templateId || '')]);
         if (!tpl) return refusal(404, 'meme.template_not_found', 'No such template.');
         const id = s.newId('mcp');
-        const row = await db.maybe(
-            `INSERT INTO meme_captions (id, subject, template_id, lines, created_at, visibility, editor_state)
-             VALUES ($1, $2, $3, $4::jsonb, now(), $5, $6::jsonb) RETURNING *`,
-            [id, subject, tpl.id, JSON.stringify(checked.lines), visibility, JSON.stringify(editor && typeof editor === 'object' ? editor : {})],
-        );
+        const row = await s.tx(async (t) => {
+            const inserted = await t.maybe(
+                `INSERT INTO meme_captions (id, subject, template_id, lines, created_at, visibility, editor_state)
+                 VALUES ($1, $2, $3, $4::jsonb, now(), $5, $6::jsonb) RETURNING *`,
+                [id, subject, tpl.id, JSON.stringify(checked.lines), visibility, JSON.stringify(editor && typeof editor === 'object' ? editor : {})],
+            );
+            if (visibility === 'public' && eventOutbox) await eventOutbox.emitIn(t, {
+                event_type: 'meme.caption.created', actor: { type: 'user', id: subject },
+                subject: { type: 'caption', id }, visibility: 'internal',
+                payload: { caption_id: id, owner: { type: 'user', id: subject }, created_at: iso(inserted.created_at) },
+            });
+            return inserted;
+        });
         return { ok: true, caption: wireCaption(row) };
     }
 
