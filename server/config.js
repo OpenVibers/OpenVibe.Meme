@@ -59,6 +59,7 @@ function load(env = process.env) {
             endpoint: env.MEME_EVENTS_ENDPOINT || '',
             intervalMs: Math.max(500, int(env.MEME_EVENTS_INTERVAL_MS, 5000)),
             scope: env.MEME_EVENTS_SCOPE || 'events.event.publish',
+            captionRelayEnabled: env.MEME_CAPTION_EVENTS_ENABLED === 'on',
         },
 
         // OpenVibe.Search's owner API: the documents queued in meme_outbox are delivered there (server/app.js,
