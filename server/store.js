@@ -717,10 +717,16 @@ function createStore(s, { search }) {
     /** The id for a slug, appending -2, -3… when one is already taken. */
     async function uniqueSlug(base, t) {
         const root = String(base || 'meme').slice(0, 70).replace(/^-+|-+$/g, '') || 'meme';
+        // A merged entry's old slug is still reserved: a later hidden candidate must not take it back and hide
+        // the 301. The redirect table arrives in 0009, after the base schema some migration tests start from.
+        const redirects = Boolean(await q(t).maybe(
+            "SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'meme_entry_redirects'",
+        ));
         let slug = root;
         for (let i = 2; i < 200; i++) {
             const found = await q(t).maybe('SELECT id FROM meme_entries WHERE slug = $1', [slug]);
-            if (!found) return slug;
+            const redirected = redirects && await q(t).maybe('SELECT 1 FROM meme_entry_redirects WHERE from_slug = $1', [slug]);
+            if (!found && !redirected) return slug;
             slug = `${root}-${i}`;
         }
         return `${root}-${Date.now().toString(36)}`;

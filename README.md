@@ -77,7 +77,7 @@ Search Fabric document.
 | `meme_examples` | entry, `med_` Media id, caption, source URL — reposted pictures keep their source link | `0003_encyclopedia.sql` |
 | `meme_entry_related` | directed related pairs; the API returns both sides' public entries | `0003_encyclopedia.sql` |
 | `meme_entry_revisions` | entry, revision, author, `change` jsonb, field-by-field `diff`, moderation state `pending\|approved\|rejected`, reviewer and note | `0003_encyclopedia.sql` |
-| `meme_entry_redirects` | a merged entry's old slug/id → the kept entry; both answer 301 | `0009_entry_title_key.sql` |
+| `meme_entry_redirects` | a merged entry's old slug/id → the kept entry; both answer 301, and a redirect wins over a hidden row that reused the slug | `0009_entry_title_key.sql`, `0011_merge_hidden_duplicates.sql` |
 | `meme_votes` | (`week` `YYYY-Www`, `subject`) → entry; one vote a week | `0001_initial.sql` |
 | `meme_templates` | id, name, `image_url` (openvibe.media, a local data-free placeholder or a Wikimedia Commons file), `box_count`, source, license, credit, source page, attribution; three placeholders seeded | `0001_initial.sql`, `0002_judge_and_encyclopedia.sql` |
 | `meme_captions` | `mcp_` + ULID, subject, template, `lines` jsonb (1–4 plain-text lines), visibility, created | `0001_initial.sql` |

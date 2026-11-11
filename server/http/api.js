@@ -111,11 +111,15 @@ function createApi(ctx) {
     /** A merged slug or id answers 301 to the kept entry; null when there is no entry and no redirect. */
     async function bySlugOrRedirect(value, req, res, { suffix = '' } = {}) {
         const row = await entries.bySlug(value);
-        if (row) return row;
+        const staff = isStaff(req.principal);
+        const mine = Boolean(row && row.submitted_by && req.principal.kind === 'user' && req.principal.subject === row.submitted_by);
+        // A hidden candidate can share the old slug of a merged entry. Staff and its author still see it; for
+        // everyone else the 301 wins, so a stale link does not become a 404.
+        if (row && (row.visibility !== 'hidden' || staff || mine)) return row;
         const redirect = await entries.redirectFor(value);
-        if (!redirect) return null;
+        if (!redirect) return row;
         const target = await entries.byId(redirect.to_entry_id);
-        if (!target || (target.visibility === 'hidden' && !isStaff(req.principal))) return null;
+        if (!target || (target.visibility === 'hidden' && !staff)) return row;
         res.redirect(301, `/api/v1/entries/${encodeURIComponent(target.slug)}${suffix}`);
         return undefined;
     }
