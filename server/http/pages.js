@@ -105,9 +105,9 @@ function createPageRoutes(ctx) {
         const slug = String(req.params.slug || '');
         const staff = staffViewer(req);
         const row = await entries.bySlug(slug);
-        if (!row) {
+        if (!row || (row.visibility === 'hidden' && !staff)) {
             // A merged entry's old slug (or id) answers 301 to the entry it was merged into, so an old link lands
-            // on the live page instead of a 404.
+            // on the live page instead of a 404. A hidden candidate that reused the merged slug must not mask it.
             const redirect = await entries.redirectFor(slug);
             if (redirect) {
                 const target = await entries.byId(redirect.to_entry_id);

@@ -138,6 +138,62 @@ const ulid = () => ids.ulid();
             const keys = trending.map((e) => `${e.kind}:${e.title.toLowerCase()}`);
             assert.strictEqual(new Set(keys).size, keys.length, 'no repeated title in Trending: ' + JSON.stringify(keys));
         });
+
+        // The old candidate miner could insert a hidden candidate with the same title after 0009, and its slug
+        // could take back the merged slug. That is how production got `close-and-enemies` 404 after the merge.
+        const hiddenId = `mem_${ulid()}`;
+        await db.exec(
+            `INSERT INTO meme_entries (id, slug, title, kind, visibility, first_seen_at, last_seen_at)
+             VALUES ($1, 'close-and-enemies', 'Keep friends close and enemies guessing', 'catchphrase', 'hidden', $2, $2)`,
+            [hiddenId, now],
+        );
+        await t.ctx.entries.addCitations(hiddenId, [
+            cite({ role: 'origin', source_id: '2', quote_text: 'Keep friends close and enemies guessing.' }),
+            cite({ role: 'use', source_id: '9', quote_text: 'Keep friends close and enemies guessing, always.' }),
+        ]);
+
+        await check('a hidden candidate that took a merged slug does not hide the 301', async () => {
+            const page = await t.get('/m/close-and-enemies');
+            assert.strictEqual(page.status, 301, 'the redirect must win over the hidden row: ' + page.status);
+            assert.strictEqual(page.headers.get('location'), '/m/keep-friends-close');
+            const api = await t.get('/api/v1/entries/close-and-enemies');
+            assert.strictEqual(api.status, 301);
+            assert.strictEqual(api.headers.get('location'), '/api/v1/entries/keep-friends-close');
+        });
+
+        await check('0011 merges a hidden duplicate into the public entry and keeps the old address', async () => {
+            const sql = fs.readFileSync(path.join(MIGRATIONS, '0011_merge_hidden_duplicates.sql'), 'utf8');
+            await applyMigration(sql);
+
+            const hidden = await db.maybe('SELECT id FROM meme_entries WHERE id = $1', [hiddenId]);
+            assert.ok(!hidden, 'the hidden duplicate row is gone');
+            // Four citations from 0009; source 2 was already on the keeper, source 9 moved over.
+            assert.strictEqual(Number(await db.value('SELECT COUNT(*)::int AS n FROM meme_citations WHERE entry_id = $1', [keeper.entry.id])), 5);
+            assert.strictEqual(Number(await db.value("SELECT COUNT(*)::int AS n FROM meme_entry_revisions WHERE entry_id = $1 AND note = 'duplicate merged by migration 0011'", [keeper.entry.id])), 1);
+            const redirect = await db.maybe('SELECT * FROM meme_entry_redirects WHERE from_slug = $1', ['close-and-enemies']);
+            assert.strictEqual(redirect.to_entry_id, keeper.entry.id, 'the original merged slug still points at the keeper');
+            assert.strictEqual(Number(await db.value(`
+                SELECT COUNT(*)::int AS n FROM meme_entries h
+                JOIN meme_entries p ON p.visibility = 'public' AND p.kind = h.kind AND p.title_key = h.title_key
+                WHERE h.visibility = 'hidden'
+            `)), 0, 'no hidden entry shares a public title');
+
+            const page = await t.get('/m/close-and-enemies');
+            assert.strictEqual(page.status, 301);
+            assert.strictEqual(page.headers.get('location'), '/m/keep-friends-close');
+            const byId = await t.get(`/m/${dup.entry.id}`);
+            assert.strictEqual(byId.status, 301);
+            assert.strictEqual(byId.headers.get('location'), '/m/keep-friends-close');
+        });
+
+        await check('a new slug never takes a merged one back', async () => {
+            const made = await t.ctx.entries.createCandidate({
+                slug: 'close-and-enemies', title: 'A different line', kind: 'catchphrase',
+                first_seen_at: now, last_seen_at: now,
+                citations: [cite({ role: 'origin', source_id: '10', quote_text: 'A different line.' })],
+            });
+            assert.strictEqual(made.entry.slug, 'close-and-enemies-2', 'the merged slug stays reserved for its 301');
+        });
     } finally {
         await t.close();
         fs.rmSync(beforeDir, { recursive: true, force: true });

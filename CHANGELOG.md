@@ -18,7 +18,14 @@ What changed in OpenVibe.Meme, newest first.
   the oldest entry, moves their citations, votes, reports, judgements, origins, spread, examples, variations, related
   rows and revision history, records the merge in the kept entry's history, and turns the old slug and id into 301
   redirects (`meme_entry_redirects`).
-- **Tests.** Two ingests of one normalised title stay one entry; 0009 moves everything and old addresses 301.
+- **The hidden duplicates 0009 left.** The old candidate miner kept inserting hidden candidates after 0009: it
+  deduped the phrase's slug before the judge rewrote the title, so a new window of the same line became a hidden row
+  with the public entry's title and its own citations — and one took back `close-and-enemies`, hiding the 301.
+  Migration 0011 merges every hidden entry that shares a public entry's `(kind, title_key)` into the public keeper,
+  moves its citations, votes and history, and turns its old slug/id into 301s. A redirect now wins over a hidden row
+  for readers (staff and the author still see it), and a new entry can never take a merged slug back.
+- **Tests.** Two ingests of one normalised title stay one entry; 0009 moves everything and old addresses 301; 0011
+  merges a hidden duplicate and the merged slug still 301s.
 
 ## 0.1.0 — 2026-10-28
 
