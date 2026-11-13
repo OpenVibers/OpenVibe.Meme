@@ -140,7 +140,7 @@ function home({ trending = [], week = null, counts = {}, feature = null, templat
                 html: `<ol class="mm-history-strip"><li><b>Origin</b><span>Find the earliest traceable example</span></li><li><b>Spread</b><span>Follow how the format traveled</span></li><li><b>Remix</b><span>See what people made from it</span></li></ol>`,
                 action: { href: '/browse?scope=internet', label: 'Explore researched entries' } },
             { title: 'Make a meme in seconds', text: 'Choose a reusable template, add your own caption, preview it instantly, and save a link others can remix.',
-                html: `<div class="mm-rise-card"><span class="mm-rise-mark" aria-hidden="true">↗</span><div><b>Fresh formats, lasting classics</b><p>Find new entries and familiar favorites in one searchable library.</p></div></div>`,
+                html: `<div class="mm-rise-card"><span class="mm-rise-mark" aria-hidden="true"><i data-ov-icon="open"></i></span><div><b>Fresh formats, lasting classics</b><p>Find new entries and familiar favorites in one searchable library.</p></div></div>`,
                 action: { href: '/make', label: 'Open the meme maker' } },
             { title: 'Made for remixing', text: 'Captions stay editable as text. Templates carry their source and reuse licence, and uploaded examples go through moderation.',
                 html: `<div><p class="mm-kicker">Example caption</p><figure class="mm-caption-card mm-demo-caption"><img src="/img/template-classic.svg" alt="An example caption on a template"><figcaption><span>when you find the original meme</span><span>the repost has a million views</span></figcaption></figure></div>`,
