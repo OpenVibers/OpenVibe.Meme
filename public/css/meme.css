@@ -254,3 +254,5 @@ fieldset.mm-templates, fieldset.mm-words, fieldset.mm-editor-tools { min-inline-
   .mm-make-grid > .mm-preview { order: -1; }
 }
 .mm-pics-source { max-width:100%; height:auto; display:block; margin-bottom:20px; }
+/* Design rule 201: the intro is one line on a computer, at most two on a phone. */
+@media (max-width: 640px) { .mm-lede { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; } }
