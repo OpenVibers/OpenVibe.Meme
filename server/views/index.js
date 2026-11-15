@@ -301,7 +301,7 @@ ${templates.map((t) => `<label class="mm-template${t.id === v.template_id ? ' is
 ${signedIn ? '' : '<p class="mm-fine">You can preview without signing in. <a href="/auth/login?next=%2Fmake">Sign in</a> to save a caption.</p>'}
 </form>
 <aside class="mm-preview" id="mm-preview" aria-labelledby="mm-preview-h"><h2 id="mm-preview-h">Your canvas</h2>
-<div class="mm-editor-stage mm-caption-card" data-stage tabindex="0" aria-label="Meme canvas. Drag caption boxes to move them."><img data-canvas-image src="${esc(chosenTemplate ? chosenTemplate.image_url : '')}" alt=""><div data-caption-boxes>${stageText}</div><div data-stickers></div></div>
+<div class="mm-editor-stage mm-caption-card" data-stage tabindex="0" role="group" aria-label="Meme canvas. Drag caption boxes to move them."><img data-canvas-image src="${esc(chosenTemplate ? chosenTemplate.image_url : '')}" alt=""><div data-caption-boxes>${stageText}</div><div data-stickers></div></div>
 <p class="mm-fine">Drag text to place it. Use the lower corner to resize. <span data-editor-status aria-live="polite"></span></p>
 ${signedIn ? '<label class="mm-field"><span>Export format</span><select data-export-format><option value="png">PNG image</option><option value="gif">GIF loop</option><option value="mp4">MP4 clip</option></select></label><button class="mm-btn mm-btn-quiet" type="button" data-render-png>Download</button><p class="mm-fine" data-render-status aria-live="polite"></p>' : '<p class="mm-fine">Sign in to download PNG, GIF, or MP4. Your preview is free to use.</p>'}
 </aside>
