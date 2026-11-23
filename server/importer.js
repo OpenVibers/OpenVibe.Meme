@@ -243,7 +243,7 @@ function createImporter({ config, s, entries, upstreams, fetchImpl = globalThis.
         stats.last_run_at = runAt;
         stats.last_error = errors[0] || null;
         const out = { ok: errors.length === 0, uses: uses.length, candidates: found.length, created: 0, enriched, errors };
-        log.log(`[OpenVibe.Meme] importer: ${uses.length} uses → ${found.length} known memes matched, ${enriched} enriched${errors.length ? `, ${errors.length} errors` : ''}`);
+        log.log(`[OpenVibe.Meme] importer: ${uses.length} uses, ${found.length} known memes matched, ${enriched} enriched${errors.length ? `, ${errors.length} errors` : ''}`);
         return out;
     }
 
