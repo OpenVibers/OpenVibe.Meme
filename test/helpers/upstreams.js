@@ -103,12 +103,14 @@ async function startUpstreams() {
         state.requests.push({ method: req.method, path: p, query: Object.fromEntries(url.searchParams), headers: { ...req.headers } });
 
         if (p === '/api/chat/global/history') {
-            const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit') || 200)));
+            // As Chat's own route: by message id, at most 100 a page, and a `before` that is not an id is refused.
+            const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 50)));
             const before = url.searchParams.get('before');
-            const list = state.messages
-                .filter((m) => !before || m.timestamp <= before)
-                .sort((a, b) => b.id - a.id)
-                .slice(0, limit);
+            const afterId = url.searchParams.get('after_id');
+            if (before != null && before !== '' && !/^\d{1,15}$/.test(before)) return json(400, { error: 'before is a message id (a number)', code: 'chat.history.before' });
+            const list = afterId != null
+                ? state.messages.filter((m) => m.id > Number(afterId)).sort((a, b) => a.id - b.id).slice(0, limit)
+                : state.messages.filter((m) => !before || m.id < Number(before)).sort((a, b) => b.id - a.id).slice(0, limit);
             return json(200, { messages: list, latest_id: list[0] ? list[0].id : null });
         }
         if (p === '/api/chat/ai/timeline') {

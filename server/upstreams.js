@@ -52,9 +52,13 @@ function createUpstreams({ config, fetchImpl = globalThis.fetch, log = console }
         return data;
     }
 
-    async function chatHistory({ before = null, limit = 200 } = {}) {
-        const q = new URLSearchParams({ limit: String(Math.min(500, Math.max(1, limit))) });
-        if (before) q.set('before', before);
+    /** Chat's public Global history, by message id: `before` (exclusive) pages back newest first, `afterId` reads
+     *  forward oldest first; Chat serves at most 100 lines a page. (11-28: this paged by time, which Chat never took:
+     *  every re-verify was a 500.) */
+    async function chatHistory({ before = null, afterId = null, limit = 100 } = {}) {
+        const q = new URLSearchParams({ limit: String(Math.min(100, Math.max(1, limit))) });
+        if (afterId != null) q.set('after_id', String(afterId));
+        else if (before != null) q.set('before', String(before));
         const data = await json(`${base(chat)}/api/chat/global/history?${q.toString()}`);
         if (data.notFound) return { messages: [], latest_id: null };
         return { messages: Array.isArray(data.messages) ? data.messages : [], latest_id: data.latest_id == null ? null : data.latest_id };
@@ -138,49 +142,36 @@ function createUpstreams({ config, fetchImpl = globalThis.fetch, log = console }
      * what the citation stores.
      */
     async function chatMessage(citation) {
-        const at = new Date(citation.observed_at).getTime();
-        if (!Number.isFinite(at)) return { status: 'gone' };
         const wanted = String(citation.chat_message_id != null ? citation.chat_message_id : citation.source_id);
-        // A public history page holds at most 500 lines, so walk back towards the citation's minute (a few pages
-        // at most) rather than declaring a line gone just because a busy channel has moved it off page one.
-        let before = chatBefore(at + 60_000);
-        for (let page = 0; page < 5; page++) {
-            const h = await chatHistory({ before, limit: 500 });
-            const msg = h.messages.find((m) => String(m.id) === wanted);
-            if (msg) return Number(msg.is_deleted) === 1 ? { status: 'hidden' } : { status: 'live', text: msg.message };
-            const oldest = h.messages.length ? parseApiTime(h.messages[h.messages.length - 1].timestamp) : null;
-            if (!oldest || Date.parse(oldest) <= at - 86_400_000) break;
-            before = chatBefore(Date.parse(oldest) - 1000);
-        }
+        if (!/^\d{1,15}$/.test(wanted)) return { status: 'gone' };
+        // The page that ends at the cited line: it is first when it is still there.
+        const h = await chatHistory({ before: Number(wanted) + 1, limit: 20 });
+        const msg = h.messages.find((m) => String(m.id) === wanted);
+        if (msg) return Number(msg.is_deleted) === 1 ? { status: 'hidden' } : { status: 'live', text: msg.message };
         return { status: 'gone' };
     }
 
     /**
      * The chat lines around a cited message: the lines before and after it, so the judge reads the joke and not
-     * one line alone. The same walk-back as chatMessage() finds the message; the page it lands on holds the rest.
+     * one line alone, newest first. The page ending at the line gives it and what came before; after_id what came after.
      */
     async function chatContext(citation, { lines = 6 } = {}) {
-        const at = new Date(citation.observed_at).getTime();
-        if (!Number.isFinite(at)) return [];
         const wanted = String(citation.chat_message_id != null ? citation.chat_message_id : citation.source_id);
-        let before = chatBefore(at + 60_000);
-        for (let page = 0; page < 5; page++) {
-            const h = await chatHistory({ before, limit: 500 });
-            const idx = h.messages.findIndex((m) => String(m.id) === wanted);
-            if (idx >= 0) {
-                const half = Math.max(1, Math.ceil(lines / 2));
-                return h.messages.slice(Math.max(0, idx - half), idx + half + 1).map((m) => ({
-                    id: m.id,
-                    who: m.username ? String(m.username) : null,
-                    text: String(m.message || ''),
-                    at: parseApiTime(m.timestamp),
-                }));
-            }
-            const oldest = h.messages.length ? parseApiTime(h.messages[h.messages.length - 1].timestamp) : null;
-            if (!oldest || Date.parse(oldest) <= at - 86_400_000) break;
-            before = chatBefore(Date.parse(oldest) - 1000);
-        }
-        return [];
+        if (!/^\d{1,15}$/.test(wanted)) return [];
+        const half = Math.max(1, Math.ceil(lines / 2));
+        const [older, newer] = await Promise.all([
+            chatHistory({ before: Number(wanted) + 1, limit: half + 1 }),
+            chatHistory({ afterId: Number(wanted), limit: half }),
+        ]);
+        if (!older.messages.some((m) => String(m.id) === wanted)) return [];
+        const after = newer.messages.filter((m) => Number(m.id) > Number(wanted)).sort((x, y) => Number(y.id) - Number(x.id)).slice(-half);
+        const upTo = older.messages.slice().sort((x, y) => Number(y.id) - Number(x.id)).slice(0, half + 1);
+        return [...after, ...upTo].map((m) => ({
+            id: m.id,
+            who: m.username ? String(m.username) : null,
+            text: String(m.message || ''),
+            at: parseApiTime(m.timestamp),
+        }));
     }
 
     /** The transcript lines around a cited second: what was said just before and just after it. */

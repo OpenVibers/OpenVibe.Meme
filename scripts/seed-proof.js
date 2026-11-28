@@ -31,8 +31,9 @@ const SLUG = 'cozmo-offline';
 function short(s, n = 100) { return String(s || '').replace(/\s+/g, ' ').trim().slice(0, n); }
 
 async function findChatLine(upstreams) {
-    // The known before-page: one minute after the line, so the page ends just past it.
-    for (const before of ['2026-10-28 00:12:00', null]) {
+    // The page that ends at the line (Chat pages by message id; 11-28: this asked by time, which Chat refuses), then
+    // the newest page in case the line's id ever changes.
+    for (const before of [CHAT_MESSAGE_ID + 1, null]) {
         const page = await upstreams.chatHistory({ before, limit: 200 });
         const byId = page.messages.find((m) => Number(m.id) === CHAT_MESSAGE_ID);
         if (byId && Number(byId.is_deleted) !== 1) return byId;
